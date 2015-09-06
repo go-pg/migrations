@@ -55,7 +55,11 @@ func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 	}
 	newVersion = oldVersion
 
-	cmd := a[0]
+	var cmd string
+	if len(a) > 0 {
+		cmd = a[0]
+	}
+
 	switch cmd {
 	case "version":
 		fmt.Printf("version is %d\n", oldVersion)
@@ -108,6 +112,11 @@ func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 		}
 		return
 	case "set_version":
+		if len(a) < 2 {
+			err = fmt.Errorf("set_version requires version as 2nd arg, e.g. set_version 42")
+			return
+		}
+
 		newVersion, err = strconv.ParseInt(a[1], 10, 64)
 		if err != nil {
 			return
