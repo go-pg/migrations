@@ -11,7 +11,7 @@ var TableName = "gopg_migrations"
 type DB interface {
 	Exec(q string, args ...interface{}) (*pg.Result, error)
 	ExecOne(q string, args ...interface{}) (*pg.Result, error)
-	Query(f pg.Collection, q string, args ...interface{}) (*pg.Result, error)
+	Query(f interface{}, q string, args ...interface{}) (*pg.Result, error)
 	QueryOne(model interface{}, q string, args ...interface{}) (*pg.Result, error)
 }
 
