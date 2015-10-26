@@ -11,8 +11,7 @@ import (
 
 func connectDB() *pg.DB {
 	db := pg.Connect(&pg.Options{
-		User:     "postgres",
-		Database: "pg_migrations_test",
+		User: "postgres",
 	})
 	_, err := db.Exec("DROP TABLE IF EXISTS ?", pg.Q(migrations.TableName))
 	if err != nil {
