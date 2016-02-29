@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"gopkg.in/pg.v3"
+	"gopkg.in/pg.v4"
 
-	"github.com/go-pg/migrations"
+	"gopkg.in/go-pg/migrations.v4"
 )
 
 func connectDB() *pg.DB {

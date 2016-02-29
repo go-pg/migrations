@@ -3,16 +3,17 @@ package migrations
 import (
 	"strings"
 
-	"gopkg.in/pg.v3"
+	"gopkg.in/pg.v4"
+	"gopkg.in/pg.v4/types"
 )
 
 var TableName = "gopg_migrations"
 
 type DB interface {
-	Exec(q string, args ...interface{}) (pg.Result, error)
-	ExecOne(q string, args ...interface{}) (pg.Result, error)
-	Query(f interface{}, q string, args ...interface{}) (pg.Result, error)
-	QueryOne(model interface{}, q string, args ...interface{}) (pg.Result, error)
+	Exec(query interface{}, params ...interface{}) (types.Result, error)
+	ExecOne(query interface{}, params ...interface{}) (types.Result, error)
+	Query(model, query interface{}, params ...interface{}) (types.Result, error)
+	QueryOne(model, query interface{}, params ...interface{}) (types.Result, error)
 }
 
 func Version(db DB) (int64, error) {
@@ -21,7 +22,7 @@ func Version(db DB) (int64, error) {
 	}
 
 	var version int64
-	_, err := db.QueryOne(pg.LoadInto(&version), `
+	_, err := db.QueryOne(pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
 	`, pg.Q(TableName))
 	if err != nil {

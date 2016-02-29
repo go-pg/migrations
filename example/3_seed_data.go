@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/go-pg/migrations"
+	"gopkg.in/go-pg/migrations.v4"
 )
 
 func init() {
