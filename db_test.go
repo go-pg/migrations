@@ -47,7 +47,7 @@ func TestVersion(t *testing.T) {
 func TestUpDown(t *testing.T) {
 	db := connectDB()
 
-	migrations.Set([]*migrations.Migration{
+	migrations.Set([]migrations.Migration{
 		{Version: 1, Up: doNothing, Down: doNothing},
 		{Version: 2, Up: doNothing, Down: doNothing},
 		{Version: 3, Up: doNothing, Down: doNothing},
@@ -103,7 +103,7 @@ func TestUpDown(t *testing.T) {
 func TestSetVersion(t *testing.T) {
 	db := connectDB()
 
-	migrations.Set([]*migrations.Migration{
+	migrations.Set([]migrations.Migration{
 		{Version: 1, Up: doPanic, Down: doPanic},
 		{Version: 2, Up: doPanic, Down: doPanic},
 		{Version: 3, Up: doPanic, Down: doPanic},

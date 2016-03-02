@@ -3,6 +3,9 @@
 You need to create database `pg_migrations_example` before running this example.
 
 ```
+> psql -c "CREATE DATABASE pg_migrations_example"
+CREATE DATABASE
+
 > go run *.go version
 version is 0
 

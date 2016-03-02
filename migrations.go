@@ -8,9 +8,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
-var migrations []*Migration
+var (
+	migrations []Migration
+	sortMu     sync.Mutex
+)
 
 type Migration struct {
 	Version int64
@@ -28,7 +32,7 @@ func Register(up, down func(DB) error) error {
 	if err != nil {
 		return err
 	}
-	migrations = append(migrations, &Migration{
+	migrations = append(migrations, Migration{
 		Version: version,
 		Up:      up,
 		Down:    down,
@@ -62,10 +66,10 @@ func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 
 	switch cmd {
 	case "version":
-		fmt.Printf("version is %d\n", oldVersion)
 		return
 	case "up", "":
-		for _, m := range migrations {
+		for i := range migrations {
+			m := &migrations[i]
 			if m.Version <= oldVersion {
 				continue
 			}
@@ -87,7 +91,7 @@ func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 
 		var m *Migration
 		for i := len(migrations) - 1; i >= 0; i-- {
-			mm := migrations[i]
+			mm := &migrations[i]
 			if mm.Version <= oldVersion {
 				m = mm
 				break
@@ -153,7 +157,7 @@ func extractVersion(name string) (int64, error) {
 	return n, nil
 }
 
-type migrationSorter []*Migration
+type migrationSorter []Migration
 
 func (ms migrationSorter) Len() int { return len(ms) }
 
@@ -161,7 +165,9 @@ func (ms migrationSorter) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
 
 func (ms migrationSorter) Less(i, j int) bool { return ms[i].Version < ms[j].Version }
 
-func sortMigrations(migrations []*Migration) {
+func sortMigrations(migrations []Migration) {
 	ms := migrationSorter(migrations)
+	sortMu.Lock()
 	sort.Sort(ms)
+	sortMu.Unlock()
 }

@@ -1,5 +1,5 @@
 package migrations
 
-func Set(ms []*Migration) {
+func Set(ms []Migration) {
 	migrations = ms
 }
