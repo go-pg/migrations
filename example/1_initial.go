@@ -13,7 +13,7 @@ func init() {
 		return err
 	}, func(db migrations.DB) error {
 		fmt.Println("dropping table my_table...")
-		_, err := db.Exec(`DROP TABLE my_table()`)
+		_, err := db.Exec(`DROP TABLE my_table`)
 		return err
 	})
 }

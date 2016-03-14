@@ -56,8 +56,8 @@ func TestUpDown(t *testing.T) {
 	}
 
 	migrations.Set([]migrations.Migration{
-		{Version: 1, Up: doNothing, Down: doNothing},
 		{Version: 2, Up: doNothing, Down: doNothing},
+		{Version: 1, Up: doNothing, Down: doNothing},
 		{Version: 3, Up: doNothing, Down: doNothing},
 	})
 	oldVersion, newVersion, err := migrations.Run(db, "up")
