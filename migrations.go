@@ -24,6 +24,10 @@ func (m *Migration) String() string {
 	return strconv.FormatInt(m.Version, 10)
 }
 
+// Register registers new database migration. Must be called
+// from file with name like "1_initialize_db.go", where:
+// - 1 - migration version;
+// - initialize_db - comment.
 func Register(up, down func(DB) error) error {
 	_, file, _, _ := runtime.Caller(1)
 	version, err := extractVersion(file)
@@ -49,6 +53,11 @@ func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 	// Make a copy so there are no side effects of sorting.
 	migrations := make([]Migration, len(theMigrations))
 	copy(migrations, theMigrations)
+	return RunMigrations(db, migrations, a...)
+}
+
+// RunMigrations is like Run, but accepts list of migrations.
+func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newVersion int64, err error) {
 	sortMigrations(migrations)
 
 	var cmd string
