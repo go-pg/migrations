@@ -41,6 +41,7 @@ func Register(up, down func(DB) error) error {
 }
 
 // Run runs command on the db. Supported commands are:
+// - init - creates gopg_migrations table.
 // - up - runs all available migrations.
 // - down - reverts last migration.
 // - version - prints current db version.
@@ -48,9 +49,14 @@ func Register(up, down func(DB) error) error {
 func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 	sortMigrations(migrations)
 
-	err = createTables(db)
-	if err != nil {
-		return
+	var cmd string
+	if len(a) > 0 {
+		cmd = a[0]
+	}
+
+	if cmd == "init" {
+		err = createTables(db)
+		cmd = "version"
 	}
 
 	oldVersion, err = Version(db)
@@ -58,11 +64,6 @@ func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 		return
 	}
 	newVersion = oldVersion
-
-	var cmd string
-	if len(a) > 0 {
-		cmd = a[0]
-	}
 
 	switch cmd {
 	case "version":
@@ -140,9 +141,9 @@ func extractVersion(name string) (int64, error) {
 		return 0, fmt.Errorf("can not extract version from %q", base)
 	}
 
-	idx := strings.Index(base, "_")
-	if idx < 0 {
-		idx = strings.Index(base, ".")
+	idx := strings.IndexByte(base, '_')
+	if idx == -1 {
+		return 0, fmt.Errorf("can not extract version from %q", base)
 	}
 
 	n, err := strconv.ParseInt(base[:idx], 10, 64)
