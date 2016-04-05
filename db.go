@@ -10,10 +10,10 @@ import (
 var TableName = "gopg_migrations"
 
 type DB interface {
-	Exec(query interface{}, params ...interface{}) (types.Result, error)
-	ExecOne(query interface{}, params ...interface{}) (types.Result, error)
-	Query(model, query interface{}, params ...interface{}) (types.Result, error)
-	QueryOne(model, query interface{}, params ...interface{}) (types.Result, error)
+	Exec(query interface{}, params ...interface{}) (*types.Result, error)
+	ExecOne(query interface{}, params ...interface{}) (*types.Result, error)
+	Query(model, query interface{}, params ...interface{}) (*types.Result, error)
+	QueryOne(model, query interface{}, params ...interface{}) (*types.Result, error)
 }
 
 func Version(db DB) (int64, error) {
