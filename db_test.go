@@ -13,7 +13,7 @@ func connectDB() *pg.DB {
 	db := pg.Connect(&pg.Options{
 		User: "postgres",
 	})
-	_, err := db.Exec("DROP TABLE IF EXISTS ?", pg.Q(migrations.TableName))
+	_, err := db.Exec("DROP TABLE IF EXISTS gopg_migrations")
 	if err != nil {
 		panic(err)
 	}
