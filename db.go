@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"gopkg.in/pg.v4"
+	"gopkg.in/pg.v4/orm"
 	"gopkg.in/pg.v4/types"
 )
 
@@ -18,6 +19,7 @@ type DB interface {
 	ExecOne(query interface{}, params ...interface{}) (*types.Result, error)
 	Query(model, query interface{}, params ...interface{}) (*types.Result, error)
 	QueryOne(model, query interface{}, params ...interface{}) (*types.Result, error)
+	Model(...interface{}) *orm.Query
 	FormatQuery(dst []byte, query string, params ...interface{}) []byte
 }
 
