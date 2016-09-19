@@ -13,15 +13,18 @@ func connectDB() *pg.DB {
 	db := pg.Connect(&pg.Options{
 		User: "postgres",
 	})
+
 	_, err := db.Exec("DROP TABLE IF EXISTS gopg_migrations")
 	if err != nil {
 		panic(err)
 	}
+
 	return db
 }
 
 func TestVersion(t *testing.T) {
 	db := connectDB()
+
 	_, _, err := migrations.Run(db, "init")
 	if err != nil {
 		t.Fatalf("init failed: %s", err)
@@ -50,6 +53,7 @@ func TestVersion(t *testing.T) {
 
 func TestUpDown(t *testing.T) {
 	db := connectDB()
+
 	_, _, err := migrations.Run(db, "init")
 	if err != nil {
 		t.Fatalf("init failed: %s", err)
@@ -110,6 +114,7 @@ func TestUpDown(t *testing.T) {
 
 func TestSetVersion(t *testing.T) {
 	db := connectDB()
+
 	_, _, err := migrations.Run(db, "init")
 	if err != nil {
 		t.Fatalf("init failed: %s", err)

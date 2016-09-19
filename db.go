@@ -23,15 +23,15 @@ type DB interface {
 	FormatQuery(dst []byte, query string, params ...interface{}) []byte
 }
 
-func getTableName(db DB) types.F {
-	return types.F(db.FormatQuery(nil, tableName))
+func getTableName() orm.FormatAppender {
+	return pg.Q(tableName)
 }
 
 func Version(db DB) (int64, error) {
 	var version int64
 	_, err := db.QueryOne(pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
-	`, getTableName(db))
+	`, getTableName())
 	if err != nil {
 		if err == pg.ErrNoRows {
 			return 0, nil
@@ -44,15 +44,13 @@ func Version(db DB) (int64, error) {
 func SetVersion(db DB, version int64) error {
 	_, err := db.Exec(`
 		INSERT INTO ? (version, created_at) VALUES (?, now())
-	`, getTableName(db), version)
+	`, getTableName(), version)
 	return err
 }
 
 func createTables(db DB) error {
-	name := getTableName(db)
-
-	if ind := strings.IndexByte(string(name), '.'); ind >= 0 {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, name[:ind])
+	if ind := strings.IndexByte(tableName, '.'); ind >= 0 {
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, tableName[:ind])
 		if err != nil {
 			return err
 		}
@@ -64,6 +62,6 @@ func createTables(db DB) error {
 			version bigint,
 			created_at timestamptz
 		)
-	`, name)
+	`, getTableName())
 	return err
 }
