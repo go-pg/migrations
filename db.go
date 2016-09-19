@@ -3,9 +3,9 @@ package migrations
 import (
 	"strings"
 
-	"gopkg.in/pg.v4"
-	"gopkg.in/pg.v4/orm"
-	"gopkg.in/pg.v4/types"
+	"gopkg.in/pg.v5"
+	"gopkg.in/pg.v5/orm"
+	"gopkg.in/pg.v5/types"
 )
 
 var tableName = "gopg_migrations"

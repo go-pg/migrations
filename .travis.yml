@@ -17,8 +17,8 @@ matrix:
     - go: tip
 
 install:
-  - go get gopkg.in/pg.v4
+  - go get gopkg.in/pg.v5
   - go get github.com/onsi/ginkgo
   - go get github.com/onsi/gomega
   - mkdir -p $HOME/gopath/src/gopkg.in/go-pg
-  - ln -s `pwd` $HOME/gopath/src/gopkg.in/go-pg/migrations.v4
+  - mv `pwd` $HOME/gopath/src/gopkg.in/go-pg/migrations.v5

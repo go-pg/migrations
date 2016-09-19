@@ -1,4 +1,4 @@
-package migrations // import "gopkg.in/go-pg/migrations.v4"
+package migrations // import "gopkg.in/go-pg/migrations.v5"
 
 import (
 	"errors"
