@@ -50,7 +50,7 @@ func SetVersion(db DB, version int64) error {
 
 func createTables(db DB) error {
 	if ind := strings.IndexByte(tableName, '.'); ind >= 0 {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, tableName[:ind])
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(tableName[:ind]))
 		if err != nil {
 			return err
 		}
