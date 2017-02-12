@@ -23,7 +23,9 @@ type Migration struct {
 func (m *Migration) String() string {
 	return strconv.FormatInt(m.Version, 10)
 }
-
+func SetMigrationTableName(table string) {
+	SetTableName(table)
+}
 // Register registers new database migration. Must be called
 // from file with name like "1_initialize_db.go", where:
 // - 1 - migration version;
