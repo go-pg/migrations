@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"gopkg.in/pg.v5"
-
-	"gopkg.in/go-pg/migrations.v5"
+	"github.com/go-pg/migrations"
+	"github.com/go-pg/pg"
 )
 
 const verbose = true

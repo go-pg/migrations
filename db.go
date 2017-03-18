@@ -3,9 +3,8 @@ package migrations
 import (
 	"strings"
 
-	"gopkg.in/pg.v5"
-	"gopkg.in/pg.v5/orm"
-	"gopkg.in/pg.v5/types"
+	"github.com/go-pg/pg"
+	"github.com/go-pg/pg/orm"
 )
 
 var tableName = "gopg_migrations"
@@ -15,10 +14,10 @@ func SetTableName(name string) {
 }
 
 type DB interface {
-	Exec(query interface{}, params ...interface{}) (*types.Result, error)
-	ExecOne(query interface{}, params ...interface{}) (*types.Result, error)
-	Query(model, query interface{}, params ...interface{}) (*types.Result, error)
-	QueryOne(model, query interface{}, params ...interface{}) (*types.Result, error)
+	Exec(query interface{}, params ...interface{}) (orm.Result, error)
+	ExecOne(query interface{}, params ...interface{}) (orm.Result, error)
+	Query(model, query interface{}, params ...interface{}) (orm.Result, error)
+	QueryOne(model, query interface{}, params ...interface{}) (orm.Result, error)
 	Model(...interface{}) *orm.Query
 	FormatQuery(dst []byte, query string, params ...interface{}) []byte
 }

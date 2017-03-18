@@ -8,8 +8,8 @@ addons:
   postgresql: "9.4"
 
 go:
-  - 1.6
   - 1.7
+  - 1.8
   - tip
 
 matrix:
@@ -17,8 +17,6 @@ matrix:
     - go: tip
 
 install:
-  - go get gopkg.in/pg.v5
+  - go get github.com/go-pg/pg
   - go get github.com/onsi/ginkgo
   - go get github.com/onsi/gomega
-  - mkdir -p $HOME/gopath/src/gopkg.in/go-pg
-  - mv `pwd` $HOME/gopath/src/gopkg.in/go-pg/migrations.v5
