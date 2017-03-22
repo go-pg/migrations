@@ -3,6 +3,9 @@ package migrations
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -80,6 +83,14 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 	newVersion = oldVersion
 
 	switch cmd {
+	case "create":
+		if len(a) < 2 {
+			fmt.Println("Please enter filename")
+		} else {
+			filename := fmt.Sprintf("%v_%s.go", newVersion+1, a[1])
+			createMigrationFile(filename)
+		}
+		return
 	case "version":
 		return
 	case "up", "":
@@ -189,4 +200,37 @@ func (ms migrationSorter) Less(i, j int) bool {
 func sortMigrations(migrations []Migration) {
 	ms := migrationSorter(migrations)
 	sort.Sort(ms)
+}
+
+func createMigrationFile(filename string) {
+	contents := `package main
+
+import (
+	"github.com/go-pg/migrations"
+)
+
+func init() {
+	migrations.Register(func(db migrations.DB) error {
+		_, err := db.Exec("")
+		return err
+	}, func(db migrations.DB) error {
+		_, err := db.Exec("")
+		return err
+	})
+}
+`
+	basepath, _ := os.Getwd()
+	file := path.Join(basepath, filename)
+
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		err := ioutil.WriteFile(file, []byte(contents), 0644)
+		if err != nil {
+			fmt.Println("error:", err)
+		} else {
+			fmt.Println("created migration file:", file)
+		}
+	} else {
+		fmt.Println("file", file, "already exists")
+	}
+
 }
