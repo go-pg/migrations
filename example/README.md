@@ -21,6 +21,9 @@ migrated from version 0 to 3
 > go run *.go version
 version is 3
 
+> go run *.go create add_email_to_users
+created migration file: 4_add_email_to_users.go
+
 > go run *.go down
 truncating my_table...
 migrated from version 3 to 2
