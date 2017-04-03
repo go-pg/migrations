@@ -3,6 +3,8 @@ package migrations
 import (
 	"strings"
 
+	"gopkg.in/pg.v5/types"
+
 	"github.com/go-pg/pg"
 	"github.com/go-pg/pg/orm"
 )
@@ -22,7 +24,7 @@ type DB interface {
 	FormatQuery(dst []byte, query string, params ...interface{}) []byte
 }
 
-func getTableName() orm.FormatAppender {
+func getTableName() types.ValueAppender {
 	return pg.Q(tableName)
 }
 
