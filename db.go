@@ -3,10 +3,9 @@ package migrations
 import (
 	"strings"
 
-	"gopkg.in/pg.v5/types"
-
 	"github.com/go-pg/pg"
 	"github.com/go-pg/pg/orm"
+	"github.com/go-pg/pg/types"
 )
 
 var tableName = "gopg_migrations"
