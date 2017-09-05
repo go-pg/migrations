@@ -49,6 +49,7 @@ func Register(up, down func(DB) error) error {
 // - init - creates gopg_migrations table.
 // - up - runs all available migrations.
 // - down - reverts last migration.
+// - reset - reverts all migrations.
 // - version - prints current db version.
 // - set_version - sets db version without running migrations.
 func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {

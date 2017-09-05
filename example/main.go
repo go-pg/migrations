@@ -9,9 +9,20 @@ import (
 	"github.com/go-pg/pg"
 )
 
-const verbose = true
+const usageText = `This program runs command on the db. Supported commands are:
+  - init - creates gopg_migrations table.
+  - up - runs all available migrations.
+  - down - reverts last migration.
+  - reset - reverts all migrations.
+  - version - prints current db version.
+  - set_version [version] - sets db version without running migrations.
+
+Usage:
+  go run *.go <command> [args]
+`
 
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 
 	db := pg.Connect(&pg.Options{
@@ -23,13 +34,17 @@ func main() {
 	if err != nil {
 		exitf(err.Error())
 	}
-	if verbose {
-		if newVersion != oldVersion {
-			fmt.Printf("migrated from version %d to %d\n", oldVersion, newVersion)
-		} else {
-			fmt.Printf("version is %d\n", oldVersion)
-		}
+	if newVersion != oldVersion {
+		fmt.Printf("migrated from version %d to %d\n", oldVersion, newVersion)
+	} else {
+		fmt.Printf("version is %d\n", oldVersion)
 	}
+}
+
+func usage() {
+	fmt.Printf(usageText)
+	flag.PrintDefaults()
+	os.Exit(2)
 }
 
 func errorf(s string, args ...interface{}) {
