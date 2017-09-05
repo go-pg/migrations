@@ -79,7 +79,6 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 	if err != nil {
 		return
 	}
-	newVersion = oldVersion
 
 	switch cmd {
 	case "create":
@@ -121,36 +120,17 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 		}
 		return
 	case "down":
-		if oldVersion == 0 {
-			return
-		}
-
-		var m *Migration
-		for i := len(migrations) - 1; i >= 0; i-- {
-			mm := &migrations[i]
-			if mm.Version <= oldVersion {
-				m = mm
-				break
-			}
-		}
-		if m == nil {
-			err = fmt.Errorf("migration %d not found\n", oldVersion)
-			return
-		}
-
-		if m.Down != nil {
-			err = m.Down(db)
-			if err != nil {
+		newVersion, err = down(db, migrations, oldVersion)
+		return
+	case "reset":
+		version := oldVersion
+		for {
+			newVersion, err = down(db, migrations, version)
+			if err != nil || newVersion == version {
 				return
 			}
+			version = newVersion
 		}
-
-		newVersion = m.Version - 1
-		err = SetVersion(db, newVersion)
-		if err != nil {
-			return
-		}
-		return
 	case "set_version":
 		if len(a) < 2 {
 			err = fmt.Errorf("set_version requires version as 2nd arg, e.g. set_version 42")
@@ -167,6 +147,36 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 		err = fmt.Errorf("unsupported command: %q", cmd)
 		return
 	}
+}
+
+func down(db DB, migrations []Migration, oldVersion int64) (newVersion int64, err error) {
+	if oldVersion == 0 {
+		return
+	}
+
+	var m *Migration
+	for i := len(migrations) - 1; i >= 0; i-- {
+		mm := &migrations[i]
+		if mm.Version <= oldVersion {
+			m = mm
+			break
+		}
+	}
+	if m == nil {
+		err = fmt.Errorf("migration %d not found\n", oldVersion)
+		return
+	}
+
+	if m.Down != nil {
+		err = m.Down(db)
+		if err != nil {
+			return
+		}
+	}
+
+	newVersion = m.Version - 1
+	err = SetVersion(db, newVersion)
+	return
 }
 
 func extractVersion(name string) (int64, error) {

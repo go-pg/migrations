@@ -21,8 +21,17 @@ migrated from version 0 to 3
 > go run *.go version
 version is 3
 
-> go run *.go create add_email_to_users
-created migration file: 4_add_email_to_users.go
+> go run *.go reset
+truncating my_table...
+dropping id column...
+dropping table my_table...
+migrated from version 3 to 0
+
+> go run *.go
+creating table my_table...
+adding id column...
+seeding my_table...
+migrated from version 0 to 3
 
 > go run *.go down
 truncating my_table...
@@ -33,6 +42,9 @@ version is 2
 
 > go run *.go set_version 1
 migrated from version 2 to 1
+
+> go run *.go create add email to users
+created migration 4_add_email_to_users.go
 ```
 
 ## Transactions
