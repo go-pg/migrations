@@ -7,15 +7,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-var (
-	theMigrations []Migration
-)
+var allMigrations []Migration
 
 type Migration struct {
 	Version int64
@@ -38,7 +37,7 @@ func Register(up, down func(DB) error) error {
 		return err
 	}
 
-	theMigrations = append(theMigrations, Migration{
+	allMigrations = append(allMigrations, Migration{
 		Version: version,
 		Up:      up,
 		Down:    down,
@@ -54,8 +53,8 @@ func Register(up, down func(DB) error) error {
 // - set_version - sets db version without running migrations.
 func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 	// Make a copy so there are no side effects of sorting.
-	migrations := make([]Migration, len(theMigrations))
-	copy(migrations, theMigrations)
+	migrations := make([]Migration, len(allMigrations))
+	copy(migrations, allMigrations)
 	return RunMigrations(db, migrations, a...)
 }
 
@@ -85,11 +84,22 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 	switch cmd {
 	case "create":
 		if len(a) < 2 {
-			fmt.Println("Please enter filename")
-		} else {
-			filename := fmt.Sprintf("%v_%s.go", newVersion+1, a[1])
-			createMigrationFile(filename)
+			fmt.Println("Please enter migration description")
+			return
 		}
+
+		var version int64
+		if len(migrations) > 0 {
+			version = migrations[len(migrations)-1].Version
+		}
+
+		filename := fmtMigrationFilename(version+1, strings.Join(a[1:], "_"))
+		err = createMigrationFile(filename)
+		if err != nil {
+			return
+		}
+
+		fmt.Println("created migration", filename)
 		return
 	case "version":
 		return
@@ -202,8 +212,30 @@ func sortMigrations(migrations []Migration) {
 	sort.Sort(ms)
 }
 
-func createMigrationFile(filename string) {
-	contents := `package main
+var migrationNameRE = regexp.MustCompile(`[^a-z0-9]+`)
+
+func fmtMigrationFilename(version int64, descr string) string {
+	descr = strings.ToLower(descr)
+	descr = migrationNameRE.ReplaceAllString(descr, "_")
+	return fmt.Sprintf("%d_%s.go", version, descr)
+}
+
+func createMigrationFile(filename string) error {
+	basepath, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	filename = path.Join(basepath, filename)
+
+	_, err = os.Stat(filename)
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("file=%q already exists (%s)", filename, err)
+	}
+
+	return ioutil.WriteFile(filename, migrationTemplate, 0644)
+}
+
+var migrationTemplate = []byte(`package main
 
 import (
 	"github.com/go-pg/migrations"
@@ -218,19 +250,4 @@ func init() {
 		return err
 	})
 }
-`
-	basepath, _ := os.Getwd()
-	file := path.Join(basepath, filename)
-
-	if _, err := os.Stat(file); os.IsNotExist(err) {
-		err := ioutil.WriteFile(file, []byte(contents), 0644)
-		if err != nil {
-			fmt.Println("error:", err)
-		} else {
-			fmt.Println("created migration file:", file)
-		}
-	} else {
-		fmt.Println("file", file, "already exists")
-	}
-
-}
+`)
