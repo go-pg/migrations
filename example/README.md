@@ -2,7 +2,7 @@
 
 You need to create database `pg_migrations_example` before running this example.
 
-```
+```bash
 > psql -c "CREATE DATABASE pg_migrations_example"
 CREATE DATABASE
 
@@ -37,19 +37,16 @@ migrated from version 2 to 1
 
 ## Transactions
 
-If you'd want to wrap the whole run in a big transaction, which may be the case 
-if you have multi-statement migrations, the code in `main.go` should be slightly modified:
+If you'd want to wrap the whole run in a big transaction, which may be the case if you have multi-statement migrations, the code in `main.go` should be slightly modified:
 
-```Go
-	var oldVersion, newVersion int64
+```go
+var oldVersion, newVersion int64
 
-	err := db.RunInTransaction(func(tx *pg.Tx) (err error) {
-		oldVersion, newVersion, err = migrations.Run(tx, flag.Args()...)
-		return
-	})
-
-	if err != nil {
-		exitf(err.Error())
-	}
-	//....
+err := db.RunInTransaction(func(tx *pg.Tx) (err error) {
+    oldVersion, newVersion, err = migrations.Run(tx, flag.Args()...)
+    return
+})
+if err != nil {
+    exitf(err.Error())
+}
 ```
