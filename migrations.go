@@ -68,12 +68,9 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 		cmd = a[0]
 	}
 
-	if cmd == "init" {
-		err = createTables(db)
-		if err != nil {
-			return
-		}
-		cmd = "version"
+	err = createTables(db)
+	if err != nil {
+		return
 	}
 
 	oldVersion, err = Version(db)

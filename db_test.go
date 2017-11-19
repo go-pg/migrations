@@ -25,11 +25,6 @@ func connectDB() *pg.DB {
 func TestVersion(t *testing.T) {
 	db := connectDB()
 
-	_, _, err := migrations.Run(db, "init")
-	if err != nil {
-		t.Fatalf("init failed: %s", err)
-	}
-
 	version, err := migrations.Version(db)
 	if err != nil {
 		t.Fatalf("Version failed: %s", err)
@@ -47,17 +42,12 @@ func TestVersion(t *testing.T) {
 		t.Fatalf("Version failed: %s", err)
 	}
 	if version != 999 {
-		t.Fatalf("got version %d, wanted %d", version)
+		t.Fatalf("got version %d, wanted 999", version)
 	}
 }
 
 func TestUpDown(t *testing.T) {
 	db := connectDB()
-
-	_, _, err := migrations.Run(db, "init")
-	if err != nil {
-		t.Fatalf("init failed: %s", err)
-	}
 
 	migrations.Set([]migrations.Migration{
 		{Version: 2, Up: doNothing, Down: doNothing},
@@ -114,11 +104,6 @@ func TestUpDown(t *testing.T) {
 
 func TestSetVersion(t *testing.T) {
 	db := connectDB()
-
-	_, _, err := migrations.Run(db, "init")
-	if err != nil {
-		t.Fatalf("init failed: %s", err)
-	}
 
 	migrations.Set([]migrations.Migration{
 		{Version: 1, Up: doPanic, Down: doPanic},

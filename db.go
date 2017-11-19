@@ -40,6 +40,10 @@ func getTableName() types.ValueAppender {
 }
 
 func Version(db DB) (int64, error) {
+	if err := createTables(db); err != nil {
+		return 0, err
+	}
+
 	var version int64
 	_, err := db.QueryOne(pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
@@ -54,6 +58,10 @@ func Version(db DB) (int64, error) {
 }
 
 func SetVersion(db DB, version int64) error {
+	if err := createTables(db); err != nil {
+		return err
+	}
+
 	_, err := db.Exec(`
 		INSERT INTO ? (version, created_at) VALUES (?, now())
 	`, getTableName(), version)
