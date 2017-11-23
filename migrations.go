@@ -46,7 +46,6 @@ func Register(up, down func(DB) error) error {
 }
 
 // Run runs command on the db. Supported commands are:
-// - init - creates gopg_migrations table.
 // - up - runs all available migrations.
 // - down - reverts last migration.
 // - reset - reverts all migrations.
@@ -161,8 +160,9 @@ func down(db DB, migrations []Migration, oldVersion int64) (newVersion int64, er
 			break
 		}
 	}
+
 	if m == nil {
-		err = fmt.Errorf("migration %d not found\n", oldVersion)
+		newVersion = oldVersion
 		return
 	}
 
