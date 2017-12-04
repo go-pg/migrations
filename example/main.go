@@ -10,7 +10,6 @@ import (
 )
 
 const usageText = `This program runs command on the db. Supported commands are:
-  - init - creates gopg_migrations table.
   - up - runs all available migrations.
   - down - reverts last migration.
   - reset - reverts all migrations.
