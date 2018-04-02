@@ -1,7 +1,6 @@
 package migrations
 
 import (
-	"io"
 	"strings"
 
 	"github.com/go-pg/pg"
@@ -15,25 +14,7 @@ func SetTableName(name string) {
 	tableName = name
 }
 
-type DB interface {
-	Exec(query interface{}, params ...interface{}) (orm.Result, error)
-	ExecOne(query interface{}, params ...interface{}) (orm.Result, error)
-	Query(model, query interface{}, params ...interface{}) (orm.Result, error)
-	QueryOne(model, query interface{}, params ...interface{}) (orm.Result, error)
-
-	Model(model ...interface{}) *orm.Query
-	Select(model interface{}) error
-	Insert(model ...interface{}) error
-	Update(model ...interface{}) error
-	Delete(model interface{}) error
-	CreateTable(model interface{}, opt *orm.CreateTableOptions) error
-	DropTable(model interface{}, opt *orm.DropTableOptions) error
-
-	CopyFrom(r io.Reader, query interface{}, params ...interface{}) (orm.Result, error)
-	CopyTo(w io.Writer, query interface{}, params ...interface{}) (orm.Result, error)
-
-	FormatQuery(dst []byte, query string, params ...interface{}) []byte
-}
+type DB = orm.DB
 
 func getTableName() types.ValueAppender {
 	return pg.Q(tableName)

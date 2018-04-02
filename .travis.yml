@@ -1,16 +1,13 @@
 sudo: false
 language: go
 
-services:
-- postgresql
-
 addons:
   postgresql: "9.4"
 
 go:
-  - 1.7.x
   - 1.8.x
   - 1.9.x
+  - 1.10.x
   - tip
 
 matrix:
