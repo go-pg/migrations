@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"reflect"
 )
 
 var allMigrations []Migration
@@ -30,11 +31,23 @@ func (m *Migration) String() string {
 // from file with name like "1_initialize_db.go", where:
 // - 1 - migration version;
 // - initialize_db - comment.
-func Register(up, down func(DB) error) error {
+func Register(params ...interface{}) error {
 	_, file, _, _ := runtime.Caller(1)
 	version, err := extractVersion(file)
 	if err != nil {
 		return err
+	}
+
+	if len(params) == 0 {
+		return errors.New("at least one param (Up migration) must be provided")
+	}
+
+	up := resolveParam(param[0])
+
+	if len(params) > 1 {
+		down := resolveParam(param[1])
+	}	else {
+		down := emptyDownMigration
 	}
 
 	allMigrations = append(allMigrations, Migration{
@@ -44,6 +57,40 @@ func Register(up, down func(DB) error) error {
 	})
 	return nil
 }
+
+func resolveParam(param interface{}) error {
+	var err error
+	switch reflect.TypeOf(param).String() {
+	// String might be a query or path to SQL file
+	case "string":
+		// handle string
+	case "func(DB) error":
+		// handle func
+	}
+
+	return err
+}
+
+func getMigrationFunc() func(DB) error {
+	return func(DB) error {
+		return nil
+	}
+}
+
+//func Register(up, down func(DB) error) error {
+//	_, file, _, _ := runtime.Caller(1)
+//	version, err := extractVersion(file)
+//	if err != nil {
+//		return err
+//	}
+//
+//	allMigrations = append(allMigrations, Migration{
+//		Version: version,
+//		Up:      up,
+//		Down:    down,
+//	})
+//	return nil
+//}
 
 // Run runs command on the db. Supported commands are:
 // - up - runs all available migrations.
