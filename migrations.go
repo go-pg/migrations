@@ -114,21 +114,6 @@ func resolveRegisterFunc(param interface{}) (func(DB) error, error) {
 	))
 }
 
-//func Register(up, down func(DB) error) error {
-//	_, file, _, _ := runtime.Caller(1)
-//	version, err := extractVersion(file)
-//	if err != nil {
-//		return err
-//	}
-//
-//	allMigrations = append(allMigrations, Migration{
-//		Version: version,
-//		Up:      up,
-//		Down:    down,
-//	})
-//	return nil
-//}
-
 // Run runs command on the db. Supported commands are:
 // - up - runs all available migrations.
 // - down - reverts last migration.
