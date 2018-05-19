@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"reflect"
 )
 
 var allMigrations []Migration
@@ -30,11 +31,42 @@ func (m *Migration) String() string {
 // from file with name like "1_initialize_db.go", where:
 // - 1 - migration version;
 // - initialize_db - comment.
-func Register(up, down func(DB) error) error {
+// Register accepts two params, first for UP migration and second for DOWN,
+// either of params can be type of "string" or "func(orm.DB) error" (see examples)
+// The second param (DOWN) is optional
+// If string provided, then it must a raw SQL query or path to file
+// If provided string ends with '.sql', then it considered as path to file
+// For complex migrations use "func(orm.DB) error"
+func Register(params ...interface{}) error {
 	_, file, _, _ := runtime.Caller(1)
 	version, err := extractVersion(file)
 	if err != nil {
 		return err
+	}
+
+	if len(params) == 0 {
+		return errors.New("at least one param (Up migration) must be provided")
+	}
+
+	if len(params) > 2 {
+		return errors.New(
+			"no more than two params must be provided, first for 'Up' migration and second for 'Down'",
+			)
+	}
+
+	up, err := resolveRegisterFunc(params[0])
+	if err != nil {
+		return err
+	}
+
+	var down func(DB) error
+	if len(params) > 1 {
+		down, err = resolveRegisterFunc(params[1])
+		if err != nil {
+			return err
+		}
+	}	else {
+		down = func(db DB) error { return nil }
 	}
 
 	allMigrations = append(allMigrations, Migration{
@@ -43,6 +75,43 @@ func Register(up, down func(DB) error) error {
 		Down:    down,
 	})
 	return nil
+}
+
+// resolveRegisterFunc checks param type, wrap string/file to function compatible with Register function and return it
+// 'param' can be one of type 'string' or 'func(orm.DB) error'
+// Provided string might be a raw SQL query or path to file
+// If provided string ends with '.sql' it considered as path to file
+func resolveRegisterFunc(param interface{}) (func(DB) error, error) {
+	paramType := reflect.TypeOf(param).String()
+	switch paramType {
+	// return provided function as is
+	case "func(orm.DB) error":
+		return param.(func(DB) error), nil
+	case "string":
+		s := param.(string)
+		ext := s[len(s)-4:]
+		if strings.ToLower(ext) == ".sql" {
+			return func(db DB) error {
+				fmt.Printf("Migrating from file: %s\n", s)
+				sql, err := ioutil.ReadFile(s)
+				if err != nil {
+					return err
+				}
+				_, err = db.Exec(string(sql))
+				return err
+			}, nil
+		}
+
+		return func(db DB) error {
+			_, err := db.Exec(s)
+			return err
+		}, nil
+
+	}
+
+	return nil, errors.New(fmt.Sprintf(
+		"register function params must be type of [string] or [func(orm.DB) error], but [%s] given", paramType,
+	))
 }
 
 // Run runs command on the db. Supported commands are:
