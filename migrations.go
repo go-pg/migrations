@@ -56,8 +56,6 @@ func Register(params ...interface{}) error {
 
 	up, err := resolveRegisterFunc(params[0])
 	if err != nil {
-		fmt.Println(err)
-
 		return err
 	}
 
