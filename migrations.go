@@ -45,6 +45,14 @@ func Register(up, down func(DB) error) error {
 	return nil
 }
 
+// Return all currently registered Migration objects.
+func GetRegisteredMigrations() []Migration {
+	// Make a copy to avoid side effects.
+	migrations := make([]Migration, len(allMigrations))
+	copy(migrations, allMigrations)
+	return migrations
+}
+
 // Run runs command on the db. Supported commands are:
 // - up - runs all available migrations.
 // - down - reverts last migration.
