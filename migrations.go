@@ -45,6 +45,14 @@ func Register(up, down func(DB) error) error {
 	return nil
 }
 
+// RegisteredMigrations returns currently registered Migration objects.
+func RegisteredMigrations() []Migration {
+	// Make a copy to avoid side effects.
+	migrations := make([]Migration, len(allMigrations))
+	copy(migrations, allMigrations)
+	return migrations
+}
+
 // Run runs command on the db. Supported commands are:
 // - up - runs all available migrations.
 // - down - reverts last migration.
@@ -52,10 +60,7 @@ func Register(up, down func(DB) error) error {
 // - version - prints current db version.
 // - set_version - sets db version without running migrations.
 func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
-	// Make a copy so there are no side effects of sorting.
-	migrations := make([]Migration, len(allMigrations))
-	copy(migrations, allMigrations)
-	return RunMigrations(db, migrations, a...)
+	return RunMigrations(db, RegisteredMigrations(), a...)
 }
 
 // RunMigrations is like Run, but accepts list of migrations.
