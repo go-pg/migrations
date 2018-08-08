@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -54,7 +55,7 @@ func RegisteredMigrations() []Migration {
 }
 
 // Run runs command on the db. Supported commands are:
-// - up - runs all available migrations.
+// - up [target] - runs all available migrations by default or up to target one if argument is provided.
 // - down - reverts last migration.
 // - reset - reverts all migrations.
 // - version - prints current db version.
@@ -67,7 +68,7 @@ func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newVersion int64, err error) {
 	sortMigrations(migrations)
 
-	var cmd string
+	cmd := "up"
 	if len(a) > 0 {
 		cmd = a[0]
 	}
@@ -105,9 +106,24 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 		return
 	case "version":
 		return
-	case "up", "":
+	case "up":
+		var target int64 = math.MaxInt64
+		if len(a) > 1 {
+			target, err = strconv.ParseInt(a[1], 10, 64)
+			if err != nil {
+				return
+			}
+			if oldVersion > target {
+				err = fmt.Errorf("old version is larger than target")
+				return
+			}
+		}
+
 		for i := range migrations {
 			m := &migrations[i]
+			if m.Version > target {
+				break
+			}
 			if m.Version <= oldVersion {
 				continue
 			}
