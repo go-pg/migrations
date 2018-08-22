@@ -10,7 +10,7 @@ import (
 )
 
 const usageText = `This program runs command on the db. Supported commands are:
-  - up - runs all available migrations.
+  - up [target] - runs all available migrations by default or up to target one if argument is provided.
   - down - reverts last migration.
   - reset - reverts all migrations.
   - version - prints current db version.
