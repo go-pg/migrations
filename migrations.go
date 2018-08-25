@@ -68,6 +68,11 @@ func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newVersion int64, err error) {
 	sortMigrations(migrations)
 
+	err = validateMigrations(migrations)
+	if err != nil {
+		return
+	}
+
 	cmd := "up"
 	if len(a) > 0 {
 		cmd = a[0]
@@ -166,6 +171,20 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 		err = fmt.Errorf("unsupported command: %q", cmd)
 		return
 	}
+}
+
+func validateMigrations(migrations []Migration) error {
+	versions := make(map[int64]struct{})
+	for _, migration := range migrations {
+		version := migration.Version
+		if _, ok := versions[version]; !ok {
+			versions[version] = struct{}{}
+		} else {
+			return fmt.Errorf("there are multiple migrations with version=%d", version)
+		}
+	}
+
+	return nil
 }
 
 func down(db DB, migrations []Migration, oldVersion int64) (newVersion int64, err error) {
