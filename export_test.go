@@ -1,5 +1,5 @@
 package migrations
 
 func Set(ms []Migration) {
-	allMigrations = ms
+	g.migrations = ms
 }
