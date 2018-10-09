@@ -15,7 +15,10 @@ import (
 	"strings"
 )
 
-var allMigrations []Migration
+var g struct {
+	visitedDirs map[string]struct{}
+	migrations  []Migration
+}
 
 type Migration struct {
 	Version int64
@@ -46,17 +49,18 @@ func Register(fns ...func(DB) error) error {
 	}
 
 	file := migrationFile()
-	version, err := extractVersion(file)
+	version, err := extractVersionGo(file)
 	if err != nil {
 		return err
 	}
 
-	allMigrations = append(allMigrations, Migration{
+	g.migrations = append(g.migrations, Migration{
 		Version: version,
 		Up:      up,
 		Down:    down,
 	})
-	return nil
+
+	return discoverSQLMigrations(file)
 }
 
 func migrationFile() string {
@@ -79,6 +83,91 @@ func migrationFile() string {
 	return ""
 }
 
+func discoverSQLMigrations(file string) error {
+	dir := filepath.Dir(file)
+
+	if _, ok := g.visitedDirs[dir]; ok {
+		return nil
+	}
+	if g.visitedDirs == nil {
+		g.visitedDirs = make(map[string]struct{})
+	}
+	g.visitedDirs[dir] = struct{}{}
+
+	var ms []Migration
+	newMigration := func(version int64) *Migration {
+		for i := range ms {
+			m := &ms[i]
+			if m.Version == version {
+				return m
+			}
+		}
+
+		ms = append(ms, Migration{
+			Version: version,
+		})
+		return &ms[len(ms)-1]
+	}
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".sql") {
+			return nil
+		}
+
+		base := filepath.Base(path)
+		idx := strings.IndexByte(base, '_')
+		if idx == -1 {
+			err := fmt.Errorf(
+				"file=%q must have name in format version_comment, e.g. 1_initial",
+				base)
+			return err
+		}
+
+		version, err := strconv.ParseInt(base[:idx], 10, 64)
+		if err != nil {
+			return err
+		}
+
+		m := newMigration(version)
+		if strings.HasSuffix(base, ".up.sql") {
+			if m.Up != nil {
+				return fmt.Errorf("migration=%d already has Up func", version)
+			}
+			m.Up = newSQLMigration(path)
+			return nil
+		}
+		if strings.HasSuffix(base, ".down.sql") {
+			if m.Down != nil {
+				return fmt.Errorf("migration=%d already has Down func", version)
+			}
+			m.Down = newSQLMigration(path)
+			return nil
+		}
+
+		return fmt.Errorf("file=%q must have extension .up.sql or .down.sql", base)
+	})
+	if err != nil {
+		return err
+	}
+
+	g.migrations = append(g.migrations, ms...)
+	return nil
+}
+
+func newSQLMigration(path string) func(DB) error {
+	return func(db DB) error {
+		b, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec(string(b))
+		return err
+	}
+}
+
 func MustRegister(fns ...func(DB) error) {
 	err := Register(fns...)
 	if err != nil {
@@ -89,8 +178,8 @@ func MustRegister(fns ...func(DB) error) {
 // RegisteredMigrations returns currently registered Migrations.
 func RegisteredMigrations() []Migration {
 	// Make a copy to avoid side effects.
-	migrations := make([]Migration, len(allMigrations))
-	copy(migrations, allMigrations)
+	migrations := make([]Migration, len(g.migrations))
+	copy(migrations, g.migrations)
 	return migrations
 }
 
@@ -256,25 +345,23 @@ func down(db DB, migrations []Migration, oldVersion int64) (newVersion int64, er
 	return
 }
 
-func extractVersion(name string) (int64, error) {
+func extractVersionGo(name string) (int64, error) {
 	base := filepath.Base(name)
-
-	if ext := filepath.Ext(base); ext != ".go" {
-		return 0, fmt.Errorf("can not extract version from %q", base)
+	if !strings.HasSuffix(name, ".go") {
+		return 0, fmt.Errorf("file=%q must have extension .go", base)
 	}
 
 	idx := strings.IndexByte(base, '_')
 	if idx == -1 {
-		return 0, fmt.Errorf("can not extract version from %q", base)
+		err := fmt.Errorf(
+			"file=%q must have name in format version_comment, e.g. 1_initial",
+			base)
+		return 0, err
 	}
 
 	n, err := strconv.ParseInt(base[:idx], 10, 64)
 	if err != nil {
 		return 0, err
-	}
-
-	if n <= 0 {
-		return 0, errors.New("version must be greater than zero")
 	}
 
 	return n, nil

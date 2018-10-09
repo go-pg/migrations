@@ -1,0 +1,1 @@
+INSERT INTO my_table VALUES (2);
