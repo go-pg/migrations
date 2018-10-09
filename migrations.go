@@ -29,10 +29,23 @@ func (m *Migration) String() string {
 
 // Register registers new database migration. Must be called
 // from file with name like "1_initialize_db.go", where:
-// - 1 - migration version;
-// - initialize_db - comment.
-func Register(up, down func(DB) error) error {
-	_, file, _, _ := runtime.Caller(1)
+//   - 1 - migration version;
+//   - initialize_db - comment.
+func Register(fns ...func(DB) error) error {
+	var up, down func(DB) error
+	switch len(fns) {
+	case 0:
+		return errors.New("Register expects at least 1 arg")
+	case 1:
+		up = fns[0]
+	case 2:
+		up = fns[0]
+		down = fns[1]
+	default:
+		return fmt.Errorf("Register expects at most 2 args, got %d", len(fns))
+	}
+
+	file := migrationFile()
 	version, err := extractVersion(file)
 	if err != nil {
 		return err
@@ -46,7 +59,34 @@ func Register(up, down func(DB) error) error {
 	return nil
 }
 
-// RegisteredMigrations returns currently registered Migration objects.
+func migrationFile() string {
+	for i := 2; i < 10; i++ {
+		pc, file, _, ok := runtime.Caller(i)
+		if !ok {
+			break
+		}
+
+		f := runtime.FuncForPC(pc)
+		if f == nil {
+			break
+		}
+		if strings.Contains(f.Name(), "go-pg") {
+			continue
+		}
+
+		return file
+	}
+	return ""
+}
+
+func MustRegister(fns ...func(DB) error) {
+	err := Register(fns...)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// RegisteredMigrations returns currently registered Migrations.
 func RegisteredMigrations() []Migration {
 	// Make a copy to avoid side effects.
 	migrations := make([]Migration, len(allMigrations))
@@ -177,13 +217,11 @@ func validateMigrations(migrations []Migration) error {
 	versions := make(map[int64]struct{})
 	for _, migration := range migrations {
 		version := migration.Version
-		if _, ok := versions[version]; !ok {
-			versions[version] = struct{}{}
-		} else {
-			return fmt.Errorf("there are multiple migrations with version=%d", version)
+		if _, ok := versions[version]; ok {
+			return fmt.Errorf("multiple migrations with version=%d", version)
 		}
+		versions[version] = struct{}{}
 	}
-
 	return nil
 }
 
@@ -291,7 +329,7 @@ import (
 )
 
 func init() {
-	migrations.Register(func(db migrations.DB) error {
+	migrations.MustRegister(func(db migrations.DB) error {
 		_, err := db.Exec("")
 		return err
 	}, func(db migrations.DB) error {
