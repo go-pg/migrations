@@ -110,7 +110,7 @@ func discoverSQLMigrations(file string) error {
 	}
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
+		if info == nil || info.IsDir() {
 			return nil
 		}
 		if !strings.HasSuffix(path, ".sql") {
