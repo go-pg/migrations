@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/go-pg/pg"
 )
 
 var g struct {
@@ -20,10 +22,13 @@ var g struct {
 	migrations  []Migration
 }
 
+type migrateFunc func(db DB, m *Migration, oldVersion int64) (int64, error)
+
 type Migration struct {
-	Version int64
-	Up      func(DB) error
-	Down    func(DB) error
+	Version       int64
+	Transactional bool
+	Up            func(DB) error
+	Down          func(DB) error
 }
 
 func (m *Migration) String() string {
@@ -35,6 +40,15 @@ func (m *Migration) String() string {
 //   - 1 - migration version;
 //   - initialize_db - comment.
 func Register(fns ...func(DB) error) error {
+	return registerMigration(false, fns...)
+}
+
+// RegisterTx is just like Register but marks the migration to be executed inside a transaction.
+func RegisterTx(fns ...func(DB) error) error {
+	return registerMigration(true, fns...)
+}
+
+func registerMigration(isTransactional bool, fns ...func(DB) error) error {
 	var up, down func(DB) error
 	switch len(fns) {
 	case 0:
@@ -55,9 +69,10 @@ func Register(fns ...func(DB) error) error {
 	}
 
 	g.migrations = append(g.migrations, Migration{
-		Version: version,
-		Up:      up,
-		Down:    down,
+		Version:       version,
+		Transactional: isTransactional,
+		Up:            up,
+		Down:          down,
 	})
 
 	return discoverSQLMigrations(file)
@@ -175,6 +190,13 @@ func MustRegister(fns ...func(DB) error) {
 	}
 }
 
+func MustRegisterTx(fns ...func(DB) error) {
+	err := RegisterTx(fns...)
+	if err != nil {
+		panic(err)
+	}
+}
+
 // RegisteredMigrations returns currently registered Migrations.
 func RegisteredMigrations() []Migration {
 	// Make a copy to avoid side effects.
@@ -261,15 +283,7 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 			if m.Version <= oldVersion {
 				continue
 			}
-			err = m.Up(db)
-			if err != nil {
-				return
-			}
-			newVersion = m.Version
-			err = SetVersion(db, newVersion)
-			if err != nil {
-				return
-			}
+			newVersion, err = runMigrateFunc(runUp, db, m, oldVersion)
 		}
 		return
 	case "down":
@@ -314,6 +328,55 @@ func validateMigrations(migrations []Migration) error {
 	return nil
 }
 
+func runMigrateFunc(f migrateFunc, db DB, m *Migration, oldVersion int64) (newVersion int64, err error) {
+	if m.Transactional {
+		switch cxn := db.(type) {
+		case *pg.DB:
+			err = cxn.RunInTransaction(func(tx *pg.Tx) error {
+				newVersion, err = f(tx, m, oldVersion)
+				return err
+			})
+			return
+		case *pg.Tx:
+			// Whole command is running is a transaction already so skip running another one
+			newVersion, err = f(db, m, oldVersion)
+			return
+		default:
+			return oldVersion, fmt.Errorf("db should be either a pg.DB or pg.Tx instance")
+		}
+	}
+	newVersion, err = f(db, m, oldVersion)
+	return
+}
+
+// func runUp(db DB, m *Migration) (int64, error) {
+func runUp(db DB, m *Migration, oldVersion int64) (int64, error) {
+	err := m.Up(db)
+	if err != nil {
+		return oldVersion, err
+	}
+	err = SetVersion(db, m.Version)
+	if err != nil {
+		return oldVersion, err
+	}
+	return m.Version, nil
+}
+
+func runDown(db DB, m *Migration, oldVersion int64) (int64, error) {
+	if m.Down != nil {
+		err := m.Down(db)
+		if err != nil {
+			return oldVersion, err
+		}
+	}
+	newVersion := m.Version - 1
+	err := SetVersion(db, newVersion)
+	if err != nil {
+		return oldVersion, err
+	}
+	return newVersion, nil
+}
+
 func down(db DB, migrations []Migration, oldVersion int64) (newVersion int64, err error) {
 	if oldVersion == 0 {
 		return
@@ -332,16 +395,7 @@ func down(db DB, migrations []Migration, oldVersion int64) (newVersion int64, er
 		newVersion = oldVersion
 		return
 	}
-
-	if m.Down != nil {
-		err = m.Down(db)
-		if err != nil {
-			return
-		}
-	}
-
-	newVersion = m.Version - 1
-	err = SetVersion(db, newVersion)
+	newVersion, err = runMigrateFunc(runDown, db, m, oldVersion)
 	return
 }
 
@@ -416,7 +470,7 @@ import (
 )
 
 func init() {
-	migrations.MustRegister(func(db migrations.DB) error {
+	migrations.MustRegisterTx(func(db migrations.DB) error {
 		_, err := db.Exec("")
 		return err
 	}, func(db migrations.DB) error {
