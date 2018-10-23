@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	migrations.MustRegister(func(db migrations.DB) error {
+	migrations.MustRegisterTx(func(db migrations.DB) error {
 		fmt.Println("seeding my_table...")
 		_, err := db.Exec(`INSERT INTO my_table VALUES (1)`)
 		return err

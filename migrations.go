@@ -22,8 +22,6 @@ var g struct {
 	migrations  []Migration
 }
 
-type migrateFunc func(db DB, m *Migration, oldVersion int64) (int64, error)
-
 type Migration struct {
 	Version       int64
 	Transactional bool
@@ -48,7 +46,7 @@ func RegisterTx(fns ...func(DB) error) error {
 	return registerMigration(true, fns...)
 }
 
-func registerMigration(isTransactional bool, fns ...func(DB) error) error {
+func registerMigration(transactional bool, fns ...func(DB) error) error {
 	var up, down func(DB) error
 	switch len(fns) {
 	case 0:
@@ -70,7 +68,7 @@ func registerMigration(isTransactional bool, fns ...func(DB) error) error {
 
 	g.migrations = append(g.migrations, Migration{
 		Version:       version,
-		Transactional: isTransactional,
+		Transactional: transactional,
 		Up:            up,
 		Down:          down,
 	})
@@ -283,7 +281,7 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 			if m.Version <= oldVersion {
 				continue
 			}
-			newVersion, err = runMigrateFunc(runUp, db, m, oldVersion)
+			newVersion, err = runMigrateFunc(runUp, db, m)
 		}
 		return
 	case "down":
@@ -328,58 +326,63 @@ func validateMigrations(migrations []Migration) error {
 	return nil
 }
 
-func runMigrateFunc(f migrateFunc, db DB, m *Migration, oldVersion int64) (newVersion int64, err error) {
-	if m.Transactional {
-		switch cxn := db.(type) {
-		case *pg.DB:
-			err = cxn.RunInTransaction(func(tx *pg.Tx) error {
-				newVersion, err = f(tx, m, oldVersion)
-				return err
-			})
-			return
-		case *pg.Tx:
-			// Whole command is running is a transaction already so skip running another one
-			newVersion, err = f(db, m, oldVersion)
-			return
-		default:
-			return oldVersion, fmt.Errorf("db should be either a pg.DB or pg.Tx instance")
-		}
+type migrateFunc func(db DB, m *Migration) (int64, error)
+
+func runMigrateFunc(f migrateFunc, db DB, m *Migration) (newVersion int64, err error) {
+	if !m.Transactional {
+		return f(db, m)
 	}
-	newVersion, err = f(db, m, oldVersion)
-	return
+
+	switch cxn := db.(type) {
+	case *pg.DB:
+		err = cxn.RunInTransaction(func(tx *pg.Tx) error {
+			newVersion, err = f(tx, m)
+			return err
+		})
+		return newVersion, err
+	case *pg.Tx:
+		// Whole command is running is a transaction already
+		// so skip running another one.
+		return f(db, m)
+	default:
+		return 0, fmt.Errorf("db should be either a pg.DB or pg.Tx instance")
+	}
 }
 
-// func runUp(db DB, m *Migration) (int64, error) {
-func runUp(db DB, m *Migration, oldVersion int64) (int64, error) {
+func runUp(db DB, m *Migration) (int64, error) {
 	err := m.Up(db)
 	if err != nil {
-		return oldVersion, err
+		return 0, err
 	}
+
 	err = SetVersion(db, m.Version)
 	if err != nil {
-		return oldVersion, err
+		return 0, err
 	}
+
 	return m.Version, nil
 }
 
-func runDown(db DB, m *Migration, oldVersion int64) (int64, error) {
+func runDown(db DB, m *Migration) (int64, error) {
 	if m.Down != nil {
 		err := m.Down(db)
 		if err != nil {
-			return oldVersion, err
+			return 0, err
 		}
 	}
+
 	newVersion := m.Version - 1
 	err := SetVersion(db, newVersion)
 	if err != nil {
-		return oldVersion, err
+		return 0, err
 	}
+
 	return newVersion, nil
 }
 
-func down(db DB, migrations []Migration, oldVersion int64) (newVersion int64, err error) {
+func down(db DB, migrations []Migration, oldVersion int64) (int64, error) {
 	if oldVersion == 0 {
-		return
+		return 0, nil
 	}
 
 	var m *Migration
@@ -392,11 +395,9 @@ func down(db DB, migrations []Migration, oldVersion int64) (newVersion int64, er
 	}
 
 	if m == nil {
-		newVersion = oldVersion
-		return
+		return oldVersion, nil
 	}
-	newVersion, err = runMigrateFunc(runDown, db, m, oldVersion)
-	return
+	return runMigrateFunc(runDown, db, m)
 }
 
 func extractVersionGo(name string) (int64, error) {
