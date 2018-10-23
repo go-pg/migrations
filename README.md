@@ -55,9 +55,23 @@ migrated from version 2 to 1
 created migration 4_add_email_to_users.go
 ```
 
+## Registering Migrations
+
+### `migrations.RegisterTx` and `migrations.MustRegisterTx`
+
+Registers migrations to be executed inside transactions.
+
+
+### `migrations.Register` and `migrations.MustRegister`
+
+Registers migrations to be executed without any transaction.
+
+
 ## Transactions
 
-If you'd want to wrap the whole run in a big transaction, which may be the case if you have multi-statement migrations, the code in `main.go` should be slightly modified:
+By default, the migrations are executed outside without any transactions. Individual migrations can however be marked to be executed inside transactions by using the `RegisterTx` function instead of `Register`. 
+
+### Global Transactions
 
 ```go
 var oldVersion, newVersion int64
