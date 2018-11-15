@@ -78,16 +78,12 @@ func registerMigration(transactional bool, fns ...func(DB) error) error {
 
 func migrationFile() string {
 	for i := 2; i < 10; i++ {
-		pc, file, _, ok := runtime.Caller(i)
+		_, file, _, ok := runtime.Caller(i)
 		if !ok {
 			break
 		}
 
-		f := runtime.FuncForPC(pc)
-		if f == nil {
-			break
-		}
-		if strings.Contains(f.Name(), "go-pg") {
+		if strings.Contains(file, "/go-pg/") {
 			continue
 		}
 
