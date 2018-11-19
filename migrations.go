@@ -278,6 +278,9 @@ func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newV
 				continue
 			}
 			newVersion, err = runMigrateFunc(runUp, db, m)
+			if err != nil {
+				return
+			}
 		}
 		return
 	case "down":
