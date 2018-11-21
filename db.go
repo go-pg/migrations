@@ -8,27 +8,38 @@ import (
 	"github.com/go-pg/pg/types"
 )
 
-var tableName = "gopg_migrations"
+var defaultTableName = "gopg_migrations"
 
 func SetTableName(name string) {
-	tableName = name
+	defaultTableName = name
+}
+
+func (g *Group) tableName() string {
+	if g.TableName == "" {
+		return defaultTableName
+	}
+	return g.TableName
 }
 
 type DB = orm.DB
 
-func getTableName() types.ValueAppender {
-	return pg.Q(tableName)
+func (g *Group) getTableName() types.ValueAppender {
+	return pg.Q(g.tableName())
 }
 
 func Version(db DB) (int64, error) {
-	if err := createTables(db); err != nil {
+	return DefaultGroup.Version(db)
+}
+
+func (g *Group) Version(db DB) (int64, error) {
+	if err := g.createTables(db); err != nil {
 		return 0, err
 	}
 
 	var version int64
 	_, err := db.QueryOne(pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
-	`, getTableName())
+	`, g.getTableName())
 	if err != nil {
 		if err == pg.ErrNoRows {
 			return 0, nil
@@ -39,19 +50,23 @@ func Version(db DB) (int64, error) {
 }
 
 func SetVersion(db DB, version int64) error {
-	if err := createTables(db); err != nil {
+	return DefaultGroup.SetVersion(db, version)
+}
+
+func (g *Group) SetVersion(db DB, version int64) error {
+	if err := g.createTables(db); err != nil {
 		return err
 	}
 
 	_, err := db.Exec(`
 		INSERT INTO ? (version, created_at) VALUES (?, now())
-	`, getTableName(), version)
+	`, g.getTableName(), version)
 	return err
 }
 
-func createTables(db DB) error {
-	if ind := strings.IndexByte(tableName, '.'); ind >= 0 {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(tableName[:ind]))
+func (g *Group) createTables(db DB) error {
+	if ind := strings.IndexByte(g.tableName(), '.'); ind >= 0 {
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(g.tableName()[:ind]))
 		if err != nil {
 			return err
 		}
@@ -63,6 +78,6 @@ func createTables(db DB) error {
 			version bigint,
 			created_at timestamptz
 		)
-	`, getTableName())
+	`, g.getTableName())
 	return err
 }
