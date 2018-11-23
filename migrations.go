@@ -28,46 +28,124 @@ func (m *Migration) String() string {
 	return strconv.FormatInt(m.Version, 10)
 }
 
-// A Group is a collection of migrations supporting registration and execution.
-type Group struct {
-	// DiscoverSQL enables auto-discovery and registration of SQL files as migration steps.
-	DiscoverSQL bool
-	// TableName is the name of the table created to track applied migrations.
-	TableName string
+// A Collection is a configurable set of migrations supporting registration and execution.
+type Collection interface {
+	// WithTableName returns a cloned Collection with the given migrations table name.
+	//
+	// A table with this name will be created to record migration version history.
+	// The default name is "gopg_migraions".
+	WithTableName(string) Collection
+	// WithAutoDiscoverSQL returns a cloned Collection with the given SQL auto-discovery setting.
+	WithAutoDiscoverSQL(bool) Collection
+	// WithRegisteredMigrations returns a cloned Collection with the given migrations registered.
+	WithRegisteredMigrations([]Migration) Collection
+
+	// Register registers new database migration. Must be called
+	// from file with name like "1_initialize_db.go", where:
+	//   - 1 - migration version;
+	//   - initialize_db - comment.
+	Register(fns ...func(DB) error) error
+	// MustRegister is like Register, but panics on failure.
+	MustRegister(fns ...func(DB) error)
+	// RegisterTx is like Register, but marks the migration to be executed inside a transaction.
+	RegisterTx(fns ...func(DB) error) error
+	// MustRegisterTx is like RegisterTx, but panics on failure.
+	MustRegisterTx(fns ...func(DB) error)
+	// RegisteredMigrations returns currently registered Migrations.
+	RegisteredMigrations() []Migration
+
+	// Run runs command on the db. Supported commands are:
+	// - up [target] - runs all available migrations by default or up to target one if argument is provided.
+	// - down - reverts last migration.
+	// - reset - reverts all migrations.
+	// - version - prints current db version.
+	// - set_version - sets db version without running migrations.
+	Run(db DB, a ...string) (oldVersion, newVersion int64, err error)
+
+	// Version returns the current migration version stored in the DB.
+	Version(db DB) (int64, error)
+	// SetVersion inserts a new migration version into the DB.
+	SetVersion(db DB, version int64) error
+}
+
+var DefaultCollection Collection = newCollection()
+
+func NewCollection() Collection {
+	return newCollection()
+}
+
+type collection struct {
+	autoDiscoverSQL bool
+	tableName       string
 
 	visitedDirs map[string]struct{}
 	migrations  []Migration
 }
 
-var DefaultGroup = &Group{}
+func newCollection() *collection {
+	return &collection{
+		tableName: "gopg_migrations",
+	}
+}
+
+func (c *collection) clone() *collection {
+	visitedDirs := make(map[string]struct{}, len(c.visitedDirs))
+	for k, v := range c.visitedDirs {
+		visitedDirs[k] = v
+	}
+	return &collection{
+		autoDiscoverSQL: c.autoDiscoverSQL,
+		tableName:       c.tableName,
+
+		migrations:  c.RegisteredMigrations(),
+		visitedDirs: visitedDirs,
+	}
+}
+
+func (c *collection) WithTableName(tableName string) Collection {
+	newC := c.clone()
+	newC.tableName = tableName
+	return newC
+}
+
+func (c *collection) WithAutoDiscoverSQL(autoDiscoverSQL bool) Collection {
+	newC := c.clone()
+	newC.autoDiscoverSQL = autoDiscoverSQL
+	return newC
+}
+
+func (c *collection) WithRegisteredMigrations(migrations []Migration) Collection {
+	newC := c.clone()
+	newC.migrations = migrations
+	return newC
+}
 
 // Register registers new database migration. Must be called
 // from file with name like "1_initialize_db.go", where:
 //   - 1 - migration version;
 //   - initialize_db - comment.
 func Register(fns ...func(DB) error) error {
-	return DefaultGroup.Register(fns...)
+	return DefaultCollection.Register(fns...)
 }
 
 // Register registers new database migration. Must be called
 // from file with name like "1_initialize_db.go", where:
 //   - 1 - migration version;
 //   - initialize_db - comment.
-func (g *Group) Register(fns ...func(DB) error) error {
-	return g.registerMigration(false, fns...)
+func (c *collection) Register(fns ...func(DB) error) error {
+	return c.registerMigration(false, fns...)
 }
 
 // RegisterTx is just like Register but marks the migration to be executed inside a transaction.
 func RegisterTx(fns ...func(DB) error) error {
-	return DefaultGroup.RegisterTx(fns...)
+	return DefaultCollection.RegisterTx(fns...)
 }
 
-// RegisterTx is just like Register but marks the migration to be executed inside a transaction.
-func (g *Group) RegisterTx(fns ...func(DB) error) error {
-	return g.registerMigration(true, fns...)
+func (c *collection) RegisterTx(fns ...func(DB) error) error {
+	return c.registerMigration(true, fns...)
 }
 
-func (g *Group) registerMigration(transactional bool, fns ...func(DB) error) error {
+func (c *collection) registerMigration(transactional bool, fns ...func(DB) error) error {
 	var up, down func(DB) error
 	switch len(fns) {
 	case 0:
@@ -87,15 +165,15 @@ func (g *Group) registerMigration(transactional bool, fns ...func(DB) error) err
 		return err
 	}
 
-	g.migrations = append(g.migrations, Migration{
+	c.migrations = append(c.migrations, Migration{
 		Version:       version,
 		Transactional: transactional,
 		Up:            up,
 		Down:          down,
 	})
 
-	if g.DiscoverSQL {
-		if err := g.discoverSQLMigrations(file); err != nil {
+	if c.autoDiscoverSQL {
+		if err := c.discoverSQLMigrations(file); err != nil {
 			return err
 		}
 	}
@@ -118,16 +196,16 @@ func migrationFile() string {
 	return ""
 }
 
-func (g *Group) discoverSQLMigrations(file string) error {
+func (c *collection) discoverSQLMigrations(file string) error {
 	dir := filepath.Dir(file)
 
-	if _, ok := g.visitedDirs[dir]; ok {
+	if _, ok := c.visitedDirs[dir]; ok {
 		return nil
 	}
-	if g.visitedDirs == nil {
-		g.visitedDirs = make(map[string]struct{})
+	if c.visitedDirs == nil {
+		c.visitedDirs = make(map[string]struct{})
 	}
-	g.visitedDirs[dir] = struct{}{}
+	c.visitedDirs[dir] = struct{}{}
 
 	var ms []Migration
 	newMigration := func(version int64) *Migration {
@@ -156,7 +234,7 @@ func (g *Group) discoverSQLMigrations(file string) error {
 		idx := strings.IndexByte(base, '_')
 		if idx == -1 {
 			err := fmt.Errorf(
-				"file=%q must have name in format version_comment, e.g. 1_initial",
+				"file=%q must have name in format version_comment, e.c. 1_initial",
 				base)
 			return err
 		}
@@ -188,7 +266,7 @@ func (g *Group) discoverSQLMigrations(file string) error {
 		return err
 	}
 
-	g.migrations = append(g.migrations, ms...)
+	c.migrations = append(c.migrations, ms...)
 	return nil
 }
 
@@ -204,22 +282,22 @@ func newSQLMigration(path string) func(DB) error {
 }
 
 func MustRegister(fns ...func(DB) error) {
-	DefaultGroup.MustRegister(fns...)
+	DefaultCollection.MustRegister(fns...)
 }
 
-func (g *Group) MustRegister(fns ...func(DB) error) {
-	err := g.Register(fns...)
+func (c *collection) MustRegister(fns ...func(DB) error) {
+	err := c.Register(fns...)
 	if err != nil {
 		panic(err)
 	}
 }
 
 func MustRegisterTx(fns ...func(DB) error) {
-	DefaultGroup.MustRegisterTx(fns...)
+	DefaultCollection.MustRegisterTx(fns...)
 }
 
-func (g *Group) MustRegisterTx(fns ...func(DB) error) {
-	err := g.RegisterTx(fns...)
+func (c *collection) MustRegisterTx(fns ...func(DB) error) {
+	err := c.RegisterTx(fns...)
 	if err != nil {
 		panic(err)
 	}
@@ -227,14 +305,13 @@ func (g *Group) MustRegisterTx(fns ...func(DB) error) {
 
 // RegisteredMigrations returns currently registered Migrations.
 func RegisteredMigrations() []Migration {
-	return DefaultGroup.RegisteredMigrations()
+	return DefaultCollection.RegisteredMigrations()
 }
 
-// RegisteredMigrations returns currently registered Migrations.
-func (g *Group) RegisteredMigrations() []Migration {
+func (c *collection) RegisteredMigrations() []Migration {
 	// Make a copy to avoid side effects.
-	migrations := make([]Migration, len(g.migrations))
-	copy(migrations, g.migrations)
+	migrations := make([]Migration, len(c.migrations))
+	copy(migrations, c.migrations)
 	return migrations
 }
 
@@ -245,25 +322,17 @@ func (g *Group) RegisteredMigrations() []Migration {
 // - version - prints current db version.
 // - set_version - sets db version without running migrations.
 func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
-	return DefaultGroup.Run(db, a...)
+	return DefaultCollection.Run(db, a...)
 }
 
 // RunMigrations is like Run, but accepts list of migrations.
 func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newVersion int64, err error) {
-	g := &Group{
-		migrations: migrations,
-	}
-	return g.Run(db, a...)
+	c := DefaultCollection.WithRegisteredMigrations(migrations)
+	return c.Run(db, a...)
 }
 
-// Run runs command on the db. Supported commands are:
-// - up [target] - runs all available migrations by default or up to target one if argument is provided.
-// - down - reverts last migration.
-// - reset - reverts all migrations.
-// - version - prints current db version.
-// - set_version - sets db version without running migrations.
-func (g *Group) Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
-	migrations := g.RegisteredMigrations()
+func (c *collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
+	migrations := c.RegisteredMigrations()
 	sortMigrations(migrations)
 
 	err = validateMigrations(migrations)
@@ -276,12 +345,12 @@ func (g *Group) Run(db DB, a ...string) (oldVersion, newVersion int64, err error
 		cmd = a[0]
 	}
 
-	err = g.createTables(db)
+	err = c.createTables(db)
 	if err != nil {
 		return
 	}
 
-	oldVersion, err = g.Version(db)
+	oldVersion, err = c.Version(db)
 	if err != nil {
 		return
 	}
@@ -330,19 +399,19 @@ func (g *Group) Run(db DB, a ...string) (oldVersion, newVersion int64, err error
 			if m.Version <= oldVersion {
 				continue
 			}
-			newVersion, err = runMigrateFunc(g.runUp, db, m)
+			newVersion, err = runMigrateFunc(c.runUp, db, m)
 			if err != nil {
 				return
 			}
 		}
 		return
 	case "down":
-		newVersion, err = g.down(db, migrations, oldVersion)
+		newVersion, err = c.down(db, migrations, oldVersion)
 		return
 	case "reset":
 		version := oldVersion
 		for {
-			newVersion, err = g.down(db, migrations, version)
+			newVersion, err = c.down(db, migrations, version)
 			if err != nil || newVersion == version {
 				return
 			}
@@ -358,7 +427,7 @@ func (g *Group) Run(db DB, a ...string) (oldVersion, newVersion int64, err error
 		if err != nil {
 			return
 		}
-		err = g.SetVersion(db, newVersion)
+		err = c.SetVersion(db, newVersion)
 		return
 	default:
 		err = fmt.Errorf("unsupported command: %q", cmd)
@@ -401,13 +470,13 @@ func runMigrateFunc(f migrateFunc, db DB, m *Migration) (newVersion int64, err e
 	}
 }
 
-func (g *Group) runUp(db DB, m *Migration) (int64, error) {
+func (c *collection) runUp(db DB, m *Migration) (int64, error) {
 	err := m.Up(db)
 	if err != nil {
 		return 0, err
 	}
 
-	err = g.SetVersion(db, m.Version)
+	err = c.SetVersion(db, m.Version)
 	if err != nil {
 		return 0, err
 	}
@@ -415,7 +484,7 @@ func (g *Group) runUp(db DB, m *Migration) (int64, error) {
 	return m.Version, nil
 }
 
-func (g *Group) runDown(db DB, m *Migration) (int64, error) {
+func (c *collection) runDown(db DB, m *Migration) (int64, error) {
 	if m.Down != nil {
 		err := m.Down(db)
 		if err != nil {
@@ -424,7 +493,7 @@ func (g *Group) runDown(db DB, m *Migration) (int64, error) {
 	}
 
 	newVersion := m.Version - 1
-	err := g.SetVersion(db, newVersion)
+	err := c.SetVersion(db, newVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -432,7 +501,7 @@ func (g *Group) runDown(db DB, m *Migration) (int64, error) {
 	return newVersion, nil
 }
 
-func (g *Group) down(db DB, migrations []Migration, oldVersion int64) (int64, error) {
+func (c *collection) down(db DB, migrations []Migration, oldVersion int64) (int64, error) {
 	if oldVersion == 0 {
 		return 0, nil
 	}
@@ -449,7 +518,7 @@ func (g *Group) down(db DB, migrations []Migration, oldVersion int64) (int64, er
 	if m == nil {
 		return oldVersion, nil
 	}
-	return runMigrateFunc(g.runDown, db, m)
+	return runMigrateFunc(c.runDown, db, m)
 }
 
 func extractVersionGo(name string) (int64, error) {

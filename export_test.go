@@ -1,5 +1,5 @@
 package migrations
 
 func Set(ms []Migration) {
-	DefaultGroup.migrations = ms
+	DefaultCollection = DefaultCollection.WithRegisteredMigrations(ms)
 }
