@@ -2,7 +2,7 @@ sudo: false
 language: go
 
 addons:
-  postgresql: "9.4"
+  postgresql: "9.6"
 
 go:
   - 1.9.x
