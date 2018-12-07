@@ -104,18 +104,21 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 }
 
 func migrationFile() string {
-	for i := 2; i < 10; i++ {
-		_, file, _, ok := runtime.Caller(i)
+	const depth = 32
+	var pcs [depth]uintptr
+	n := runtime.Callers(1, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+
+	for {
+		f, ok := frames.Next()
 		if !ok {
 			break
 		}
-
-		if strings.Contains(file, "/go-pg/") {
-			continue
+		if !strings.Contains(f.Function, "/go-pg/migrations") {
+			return f.File
 		}
-
-		return file
 	}
+
 	return ""
 }
 

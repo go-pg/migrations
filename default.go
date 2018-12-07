@@ -49,8 +49,3 @@ func RegisteredMigrations() []Migration {
 func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
 	return DefaultCollection.Run(db, a...)
 }
-
-// RunMigrations is like Run, but accepts list of migrations.
-func RunMigrations(db DB, migrations []Migration, a ...string) (oldVersion, newVersion int64, err error) {
-	return NewCollection(migrations...).Run(db, a...)
-}
