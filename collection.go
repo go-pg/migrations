@@ -93,11 +93,9 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 		Down:          down,
 	})
 
-	if !c.sqlAutodiscoverDisabled {
-		err = c.discoverSQLMigrations(file)
-		if err != nil {
-			return err
-		}
+	err = c.discoverSQLMigrations(file)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -123,11 +121,15 @@ func migrationFile() string {
 }
 
 func (c *Collection) discoverSQLMigrations(file string) error {
-	dir := filepath.Dir(file)
+	if c.sqlAutodiscoverDisabled {
+		return nil
+	}
 
+	dir := filepath.Dir(file)
 	if _, ok := c.visitedDirs[dir]; ok {
 		return nil
 	}
+
 	if c.visitedDirs == nil {
 		c.visitedDirs = make(map[string]struct{})
 	}
@@ -229,6 +231,11 @@ func (c *Collection) Migrations() []Migration {
 }
 
 func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
+	err = c.discoverSQLMigrations(migrationFile())
+	if err != nil {
+		return
+	}
+
 	migrations := c.Migrations()
 	sortMigrations(migrations)
 
