@@ -34,6 +34,8 @@ type Collection struct {
 	_tableName              string
 	sqlAutodiscoverDisabled bool
 
+	createTableOnce sync.Once
+
 	mu          sync.Mutex
 	visitedDirs map[string]struct{}
 	migrations  []*Migration
@@ -274,30 +276,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		cmd = a[0]
 	}
 
-	err = c.createTable(db)
-	if err != nil {
-		return
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return
-	}
-	defer tx.Rollback()
-
-	_, err = tx.Exec("LOCK TABLE ?", c.tableName())
-	if err != nil {
-		return
-	}
-
-	oldVersion, err = c.Version(tx)
-	if err != nil {
-		return
-	}
-	newVersion = oldVersion
-
-	switch cmd {
-	case "create":
+	if cmd == "create" {
 		if len(a) < 2 {
 			fmt.Println("Please enter migration description")
 			return
@@ -315,6 +294,27 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		}
 
 		fmt.Println("created migration", filename)
+		return
+	}
+
+	err = c.createTable(db)
+	if err != nil {
+		return
+	}
+
+	tx, err := c.lockTable(db)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+
+	oldVersion, err = c.Version(tx)
+	if err != nil {
+		return
+	}
+	newVersion = oldVersion
+
+	switch cmd {
 	case "version":
 	case "up":
 		var target int64 = math.MaxInt64
@@ -336,10 +336,24 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 			if m.Version <= oldVersion {
 				continue
 			}
+
+			if tx == nil {
+				tx, err = c.lockTable(db)
+				if err != nil {
+					return
+				}
+			}
+
 			newVersion, err = c.runMigrateFunc(c.runUp, db, tx, m)
 			if err != nil {
 				return
 			}
+
+			err = tx.Commit()
+			if err != nil {
+				return
+			}
+			tx = nil
 		}
 	case "down":
 		newVersion, err = c.down(db, tx, migrations, oldVersion)
@@ -349,10 +363,24 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 	case "reset":
 		version := oldVersion
 		for {
+			if tx == nil {
+				tx, err = c.lockTable(db)
+				if err != nil {
+					return
+				}
+			}
+
 			newVersion, err = c.down(db, tx, migrations, version)
 			if err != nil {
 				return
 			}
+
+			err = tx.Commit()
+			if err != nil {
+				return
+			}
+			tx = nil
+
 			if newVersion == version {
 				break
 			}
@@ -368,7 +396,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		if err != nil {
 			return
 		}
-		err = c.SetVersion(tx, newVersion)
+		err = c.setVersion(tx, newVersion)
 		if err != nil {
 			return
 		}
@@ -379,7 +407,9 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		}
 	}
 
-	err = tx.Commit()
+	if tx != nil {
+		err = tx.Commit()
+	}
 	return
 }
 
@@ -409,7 +439,7 @@ func (c *Collection) runMigrateFunc(
 		return
 	}
 
-	err = c.SetVersion(tx, newVersion)
+	err = c.setVersion(tx, newVersion)
 	return
 }
 
@@ -477,7 +507,10 @@ func (c *Collection) SetVersion(db DB, version int64) error {
 	if err := c.createTable(db); err != nil {
 		return err
 	}
+	return c.setVersion(db, version)
+}
 
+func (c *Collection) setVersion(db DB, version int64) error {
 	_, err := db.Exec(`
 		INSERT INTO ? (version, created_at) VALUES (?, now())
 	`, c.tableName(), version)
@@ -485,21 +518,39 @@ func (c *Collection) SetVersion(db DB, version int64) error {
 }
 
 func (c *Collection) createTable(db DB) error {
-	if ind := strings.IndexByte(c._tableName, '.'); ind >= 0 {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(c._tableName[:ind]))
-		if err != nil {
-			return err
+	var err error
+	c.createTableOnce.Do(func() {
+		if ind := strings.IndexByte(c._tableName, '.'); ind >= 0 {
+			_, err = db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(c._tableName[:ind]))
+			if err != nil {
+				return
+			}
 		}
-	}
 
-	_, err := db.Exec(`
+		_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS ? (
 			id serial,
 			version bigint,
 			created_at timestamptz
 		)
 	`, c.tableName())
+	})
 	return err
+}
+
+func (c *Collection) lockTable(db DB) (*pg.Tx, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tx.Exec("LOCK TABLE ?", c.tableName())
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	return tx, nil
 }
 
 func extractVersionGo(name string) (int64, error) {
