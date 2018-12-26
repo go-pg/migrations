@@ -280,6 +280,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		if err != nil {
 			return
 		}
+		return
 	case "create":
 		if len(a) < 2 {
 			fmt.Println("Please enter migration description")
