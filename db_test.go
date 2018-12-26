@@ -19,6 +19,11 @@ func connectDB() *pg.DB {
 		panic(err)
 	}
 
+	_, _, err = migrations.Run(db, "init")
+	if err != nil {
+		panic(err)
+	}
+
 	return db
 }
 
