@@ -34,8 +34,6 @@ type Collection struct {
 	_tableName              string
 	sqlAutodiscoverDisabled bool
 
-	createTableOnce sync.Once
-
 	mu          sync.Mutex
 	visitedDirs map[string]struct{}
 	migrations  []*Migration
@@ -276,7 +274,13 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		cmd = a[0]
 	}
 
-	if cmd == "create" {
+	switch cmd {
+	case "init":
+		err = c.createTable(db)
+		if err != nil {
+			return
+		}
+	case "create":
 		if len(a) < 2 {
 			fmt.Println("Please enter migration description")
 			return
@@ -294,11 +298,6 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		}
 
 		fmt.Println("created migration", filename)
-		return
-	}
-
-	err = c.createTable(db)
-	if err != nil {
 		return
 	}
 
@@ -396,7 +395,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		if err != nil {
 			return
 		}
-		err = c.setVersion(tx, newVersion)
+		err = c.SetVersion(tx, newVersion)
 		if err != nil {
 			return
 		}
@@ -439,7 +438,7 @@ func (c *Collection) runMigrateFunc(
 		return
 	}
 
-	err = c.setVersion(tx, newVersion)
+	err = c.SetVersion(tx, newVersion)
 	return
 }
 
@@ -486,10 +485,6 @@ func (c *Collection) tableName() types.ValueAppender {
 }
 
 func (c *Collection) Version(db DB) (int64, error) {
-	if err := c.createTable(db); err != nil {
-		return 0, err
-	}
-
 	var version int64
 	_, err := db.QueryOne(pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
@@ -504,13 +499,6 @@ func (c *Collection) Version(db DB) (int64, error) {
 }
 
 func (c *Collection) SetVersion(db DB, version int64) error {
-	if err := c.createTable(db); err != nil {
-		return err
-	}
-	return c.setVersion(db, version)
-}
-
-func (c *Collection) setVersion(db DB, version int64) error {
 	_, err := db.Exec(`
 		INSERT INTO ? (version, created_at) VALUES (?, now())
 	`, c.tableName(), version)
@@ -518,23 +506,20 @@ func (c *Collection) setVersion(db DB, version int64) error {
 }
 
 func (c *Collection) createTable(db DB) error {
-	var err error
-	c.createTableOnce.Do(func() {
-		if ind := strings.IndexByte(c._tableName, '.'); ind >= 0 {
-			_, err = db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(c._tableName[:ind]))
-			if err != nil {
-				return
-			}
+	if ind := strings.IndexByte(c._tableName, '.'); ind >= 0 {
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(c._tableName[:ind]))
+		if err != nil {
+			return err
 		}
+	}
 
-		_, err = db.Exec(`
+	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS ? (
 			id serial,
 			version bigint,
 			created_at timestamptz
 		)
 	`, c.tableName())
-	})
 	return err
 }
 
