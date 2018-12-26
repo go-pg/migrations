@@ -36,7 +36,7 @@ func MustRegisterTx(fns ...func(DB) error) {
 }
 
 // RegisteredMigrations returns currently registered Migrations.
-func RegisteredMigrations() []Migration {
+func RegisteredMigrations() []*Migration {
 	return DefaultCollection.Migrations()
 }
 

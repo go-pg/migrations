@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-pg/pg"
 	"github.com/go-pg/pg/types"
@@ -30,22 +31,23 @@ func (m *Migration) String() string {
 }
 
 type Collection struct {
-	tableName               string
+	_tableName              string
 	sqlAutodiscoverDisabled bool
 
+	mu          sync.Mutex
 	visitedDirs map[string]struct{}
-	migrations  []Migration
+	migrations  []*Migration
 }
 
-func NewCollection(migrations ...Migration) *Collection {
+func NewCollection(migrations ...*Migration) *Collection {
 	return &Collection{
-		tableName:  "gopg_migrations",
+		_tableName: "gopg_migrations",
 		migrations: migrations,
 	}
 }
 
 func (c *Collection) SetTableName(tableName string) *Collection {
-	c.tableName = tableName
+	c._tableName = tableName
 	return c
 }
 
@@ -86,17 +88,20 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 		return err
 	}
 
-	c.migrations = append(c.migrations, Migration{
+	err = c.discoverSQLMigrations(file)
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.migrations = append(c.migrations, &Migration{
 		Version:       version,
 		Transactional: tx,
 		Up:            up,
 		Down:          down,
 	})
-
-	err = c.discoverSQLMigrations(file)
-	if err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -121,6 +126,9 @@ func migrationFile() string {
 }
 
 func (c *Collection) discoverSQLMigrations(file string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.sqlAutodiscoverDisabled {
 		return nil
 	}
@@ -135,19 +143,19 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 	}
 	c.visitedDirs[dir] = struct{}{}
 
-	var ms []Migration
+	var ms []*Migration
 	newMigration := func(version int64) *Migration {
 		for i := range ms {
-			m := &ms[i]
+			m := ms[i]
 			if m.Version == version {
 				return m
 			}
 		}
 
-		ms = append(ms, Migration{
+		ms = append(ms, &Migration{
 			Version: version,
 		})
-		return &ms[len(ms)-1]
+		return ms[len(ms)-1]
 	}
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -177,12 +185,24 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 			if m.Up != nil {
 				return fmt.Errorf("migration=%d already has Up func", version)
 			}
+			if strings.HasSuffix(base, ".tx.up.sql") {
+				m.Transactional = true
+			} else if m.Transactional {
+				return fmt.Errorf("migration=%d is transactional, but %q is not",
+					version, base)
+			}
 			m.Up = newSQLMigration(path)
 			return nil
 		}
 		if strings.HasSuffix(base, ".down.sql") {
 			if m.Down != nil {
 				return fmt.Errorf("migration=%d already has Down func", version)
+			}
+			if strings.HasSuffix(base, ".tx.down.sql") {
+				m.Transactional = true
+			} else if m.Transactional {
+				return fmt.Errorf("migration=%d is transactional, but %q is not",
+					version, base)
 			}
 			m.Down = newSQLMigration(path)
 			return nil
@@ -223,9 +243,12 @@ func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
 	}
 }
 
-func (c *Collection) Migrations() []Migration {
+func (c *Collection) Migrations() []*Migration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// Make a copy to avoid side effects.
-	migrations := make([]Migration, len(c.migrations))
+	migrations := make([]*Migration, len(c.migrations))
 	copy(migrations, c.migrations)
 	return migrations
 }
@@ -237,7 +260,9 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 	}
 
 	migrations := c.Migrations()
-	sortMigrations(migrations)
+	sort.Slice(migrations, func(i, j int) bool {
+		return migrations[i].Version < migrations[j].Version
+	})
 
 	err = validateMigrations(migrations)
 	if err != nil {
@@ -249,12 +274,23 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		cmd = a[0]
 	}
 
-	err = c.createTables(db)
+	err = c.createTable(db)
 	if err != nil {
 		return
 	}
 
-	oldVersion, err = c.Version(db)
+	tx, err := db.Begin()
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("LOCK TABLE ?", c.tableName())
+	if err != nil {
+		return
+	}
+
+	oldVersion, err = c.Version(tx)
 	if err != nil {
 		return
 	}
@@ -279,9 +315,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		}
 
 		fmt.Println("created migration", filename)
-		return
 	case "version":
-		return
 	case "up":
 		var target int64 = math.MaxInt64
 		if len(a) > 1 {
@@ -290,34 +324,37 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 				return
 			}
 			if oldVersion > target {
-				err = fmt.Errorf("old version is larger than target")
+				err = fmt.Errorf("old version is bigger than target")
 				return
 			}
 		}
 
-		for i := range migrations {
-			m := &migrations[i]
+		for _, m := range migrations {
 			if m.Version > target {
 				break
 			}
 			if m.Version <= oldVersion {
 				continue
 			}
-			newVersion, err = runMigrateFunc(c.runUp, db, m)
+			newVersion, err = c.runMigrateFunc(c.runUp, db, tx, m)
 			if err != nil {
 				return
 			}
 		}
-		return
 	case "down":
-		newVersion, err = c.down(db, migrations, oldVersion)
-		return
+		newVersion, err = c.down(db, tx, migrations, oldVersion)
+		if err != nil {
+			return
+		}
 	case "reset":
 		version := oldVersion
 		for {
-			newVersion, err = c.down(db, migrations, version)
-			if err != nil || newVersion == version {
+			newVersion, err = c.down(db, tx, migrations, version)
+			if err != nil {
 				return
+			}
+			if newVersion == version {
+				break
 			}
 			version = newVersion
 		}
@@ -331,15 +368,22 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		if err != nil {
 			return
 		}
-		err = c.SetVersion(db, newVersion)
-		return
+		err = c.SetVersion(tx, newVersion)
+		if err != nil {
+			return
+		}
 	default:
 		err = fmt.Errorf("unsupported command: %q", cmd)
-		return
+		if err != nil {
+			return
+		}
 	}
+
+	err = tx.Commit()
+	return
 }
 
-func validateMigrations(migrations []Migration) error {
+func validateMigrations(migrations []*Migration) error {
 	versions := make(map[int64]struct{})
 	for _, migration := range migrations {
 		version := migration.Version
@@ -353,25 +397,20 @@ func validateMigrations(migrations []Migration) error {
 
 type migrateFunc func(db DB, m *Migration) (int64, error)
 
-func runMigrateFunc(f migrateFunc, db DB, m *Migration) (newVersion int64, err error) {
-	if !m.Transactional {
-		return f(db, m)
+func (c *Collection) runMigrateFunc(
+	fn migrateFunc, db DB, tx *pg.Tx, m *Migration,
+) (newVersion int64, err error) {
+	if m.Transactional {
+		newVersion, err = fn(tx, m)
+	} else {
+		newVersion, err = fn(db, m)
+	}
+	if err != nil {
+		return
 	}
 
-	switch cxn := db.(type) {
-	case *pg.DB:
-		err = cxn.RunInTransaction(func(tx *pg.Tx) error {
-			newVersion, err = f(tx, m)
-			return err
-		})
-		return newVersion, err
-	case *pg.Tx:
-		// Whole command is running is a transaction already
-		// so skip running another one.
-		return f(db, m)
-	default:
-		return 0, fmt.Errorf("db should be either a pg.DB or pg.Tx instance")
-	}
+	err = c.SetVersion(tx, newVersion)
+	return
 }
 
 func (c *Collection) runUp(db DB, m *Migration) (int64, error) {
@@ -379,12 +418,6 @@ func (c *Collection) runUp(db DB, m *Migration) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-
-	err = c.SetVersion(db, m.Version)
-	if err != nil {
-		return 0, err
-	}
-
 	return m.Version, nil
 }
 
@@ -395,24 +428,17 @@ func (c *Collection) runDown(db DB, m *Migration) (int64, error) {
 			return 0, err
 		}
 	}
-
-	newVersion := m.Version - 1
-	err := c.SetVersion(db, newVersion)
-	if err != nil {
-		return 0, err
-	}
-
-	return newVersion, nil
+	return m.Version - 1, nil
 }
 
-func (c *Collection) down(db DB, migrations []Migration, oldVersion int64) (int64, error) {
+func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion int64) (int64, error) {
 	if oldVersion == 0 {
 		return 0, nil
 	}
 
 	var m *Migration
 	for i := len(migrations) - 1; i >= 0; i-- {
-		mm := &migrations[i]
+		mm := migrations[i]
 		if mm.Version <= oldVersion {
 			m = mm
 			break
@@ -422,22 +448,22 @@ func (c *Collection) down(db DB, migrations []Migration, oldVersion int64) (int6
 	if m == nil {
 		return oldVersion, nil
 	}
-	return runMigrateFunc(c.runDown, db, m)
+	return c.runMigrateFunc(c.runDown, db, tx, m)
 }
 
-func (c *Collection) getTableName() types.ValueAppender {
-	return pg.Q(c.tableName)
+func (c *Collection) tableName() types.ValueAppender {
+	return pg.Q(c._tableName)
 }
 
 func (c *Collection) Version(db DB) (int64, error) {
-	if err := c.createTables(db); err != nil {
+	if err := c.createTable(db); err != nil {
 		return 0, err
 	}
 
 	var version int64
 	_, err := db.QueryOne(pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
-	`, c.getTableName())
+	`, c.tableName())
 	if err != nil {
 		if err == pg.ErrNoRows {
 			return 0, nil
@@ -448,19 +474,19 @@ func (c *Collection) Version(db DB) (int64, error) {
 }
 
 func (c *Collection) SetVersion(db DB, version int64) error {
-	if err := c.createTables(db); err != nil {
+	if err := c.createTable(db); err != nil {
 		return err
 	}
 
 	_, err := db.Exec(`
 		INSERT INTO ? (version, created_at) VALUES (?, now())
-	`, c.getTableName(), version)
+	`, c.tableName(), version)
 	return err
 }
 
-func (c *Collection) createTables(db DB) error {
-	if ind := strings.IndexByte(c.tableName, '.'); ind >= 0 {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(c.tableName[:ind]))
+func (c *Collection) createTable(db DB) error {
+	if ind := strings.IndexByte(c._tableName, '.'); ind >= 0 {
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(c._tableName[:ind]))
 		if err != nil {
 			return err
 		}
@@ -472,7 +498,7 @@ func (c *Collection) createTables(db DB) error {
 			version bigint,
 			created_at timestamptz
 		)
-	`, c.getTableName())
+	`, c.tableName())
 	return err
 }
 
@@ -496,25 +522,6 @@ func extractVersionGo(name string) (int64, error) {
 	}
 
 	return n, nil
-}
-
-type migrationSorter []Migration
-
-func (ms migrationSorter) Len() int {
-	return len(ms)
-}
-
-func (ms migrationSorter) Swap(i, j int) {
-	ms[i], ms[j] = ms[j], ms[i]
-}
-
-func (ms migrationSorter) Less(i, j int) bool {
-	return ms[i].Version < ms[j].Version
-}
-
-func sortMigrations(migrations []Migration) {
-	ms := migrationSorter(migrations)
-	sort.Sort(ms)
 }
 
 var migrationNameRE = regexp.MustCompile(`[^a-z0-9]+`)
