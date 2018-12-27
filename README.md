@@ -14,6 +14,8 @@ You need to create database `pg_migrations_example` before running this example.
 > psql -c "CREATE DATABASE pg_migrations_example"
 CREATE DATABASE
 
+> go run *.go init
+
 > go run *.go version
 version is 0
 
@@ -69,7 +71,7 @@ Registers migrations to be executed without any transaction.
 
 ## Transactions
 
-By default, the migrations are executed outside without any transactions. Individual migrations can however be marked to be executed inside transactions by using the `RegisterTx` function instead of `Register`. 
+By default, the migrations are executed outside without any transactions. Individual migrations can however be marked to be executed inside transactions by using the `RegisterTx` function instead of `Register`.
 
 ### Global Transactions
 
