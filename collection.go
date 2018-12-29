@@ -1,6 +1,8 @@
 package migrations
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -20,10 +22,13 @@ import (
 )
 
 type Migration struct {
-	Version       int64
-	Transactional bool
-	Up            func(DB) error
-	Down          func(DB) error
+	Version int64
+
+	UpTx bool
+	Up   func(DB) error
+
+	DownTx bool
+	Down   func(DB) error
 }
 
 func (m *Migration) String() string {
@@ -97,10 +102,13 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 	defer c.mu.Unlock()
 
 	c.migrations = append(c.migrations, &Migration{
-		Version:       version,
-		Transactional: tx,
-		Up:            up,
-		Down:          down,
+		Version: version,
+
+		UpTx: tx,
+		Up:   up,
+
+		DownTx: tx,
+		Down:   down,
 	})
 
 	return nil
@@ -185,12 +193,7 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 			if m.Up != nil {
 				return fmt.Errorf("migration=%d already has Up func", version)
 			}
-			if strings.HasSuffix(base, ".tx.up.sql") {
-				m.Transactional = true
-			} else if m.Transactional {
-				return fmt.Errorf("migration=%d is transactional, but %q is not",
-					version, base)
-			}
+			m.UpTx = strings.HasSuffix(base, ".tx.up.sql")
 			m.Up = newSQLMigration(path)
 			return nil
 		}
@@ -198,12 +201,7 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 			if m.Down != nil {
 				return fmt.Errorf("migration=%d already has Down func", version)
 			}
-			if strings.HasSuffix(base, ".tx.down.sql") {
-				m.Transactional = true
-			} else if m.Transactional {
-				return fmt.Errorf("migration=%d is transactional, but %q is not",
-					version, base)
-			}
+			m.DownTx = strings.HasSuffix(base, ".tx.down.sql")
 			m.Down = newSQLMigration(path)
 			return nil
 		}
@@ -220,12 +218,55 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 
 func newSQLMigration(path string) func(DB) error {
 	return func(db DB) error {
-		b, err := ioutil.ReadFile(path)
+		f, err := os.Open(path)
 		if err != nil {
 			return err
 		}
-		_, err = db.Exec(string(b))
-		return err
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+
+		var query []byte
+		var queries []string
+		for scanner.Scan() {
+			b := scanner.Bytes()
+
+			const prefix = "--gopg:"
+			if bytes.HasPrefix(b, []byte(prefix)) {
+				b = b[len(prefix):]
+				if bytes.Equal(b, []byte("split")) {
+					queries = append(queries, string(query))
+					query = query[:0]
+					continue
+				}
+				return fmt.Errorf("unknown gopg directive: %q", b)
+			}
+
+			query = append(query, b...)
+			query = append(query, '\n')
+		}
+		if len(query) > 0 {
+			queries = append(queries, string(query))
+		}
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+
+		if len(queries) > 1 {
+			switch v := db.(type) {
+			case *pg.DB:
+				db = v.Conn()
+			}
+		}
+
+		for _, q := range queries {
+			_, err = db.Exec(q)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 }
 
@@ -344,7 +385,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 				}
 			}
 
-			newVersion, err = c.runMigrateFunc(c.runUp, db, tx, m)
+			newVersion, err = c.runUp(db, tx, m)
 			if err != nil {
 				return
 			}
@@ -425,40 +466,43 @@ func validateMigrations(migrations []*Migration) error {
 	return nil
 }
 
-type migrateFunc func(db DB, m *Migration) (int64, error)
-
-func (c *Collection) runMigrateFunc(
-	fn migrateFunc, db DB, tx *pg.Tx, m *Migration,
-) (newVersion int64, err error) {
-	if m.Transactional {
-		newVersion, err = fn(tx, m)
-	} else {
-		newVersion, err = fn(db, m)
+func (c *Collection) runUp(db DB, tx *pg.Tx, m *Migration) (int64, error) {
+	if m.UpTx {
+		db = tx
 	}
-	if err != nil {
-		return
-	}
-
-	err = c.SetVersion(tx, newVersion)
-	return
-}
-
-func (c *Collection) runUp(db DB, m *Migration) (int64, error) {
-	err := m.Up(db)
-	if err != nil {
-		return 0, err
-	}
-	return m.Version, nil
-}
-
-func (c *Collection) runDown(db DB, m *Migration) (int64, error) {
-	if m.Down != nil {
-		err := m.Down(db)
+	return c.run(tx, func() (int64, error) {
+		err := m.Up(db)
 		if err != nil {
 			return 0, err
 		}
+		return m.Version, nil
+	})
+}
+
+func (c *Collection) runDown(db DB, tx *pg.Tx, m *Migration) (int64, error) {
+	if m.DownTx {
+		db = tx
 	}
-	return m.Version - 1, nil
+	return c.run(tx, func() (int64, error) {
+		if m.Down != nil {
+			err := m.Down(db)
+			if err != nil {
+				return 0, err
+			}
+		}
+		return m.Version - 1, nil
+	})
+}
+
+func (c *Collection) run(
+	tx *pg.Tx, fn func() (int64, error),
+) (newVersion int64, err error) {
+	newVersion, err = fn()
+	if err != nil {
+		return
+	}
+	err = c.SetVersion(tx, newVersion)
+	return
 }
 
 func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion int64) (int64, error) {
@@ -478,7 +522,7 @@ func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion 
 	if m == nil {
 		return oldVersion, nil
 	}
-	return c.runMigrateFunc(c.runDown, db, tx, m)
+	return c.runDown(db, tx, m)
 }
 
 func (c *Collection) tableName() types.ValueAppender {

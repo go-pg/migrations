@@ -68,6 +68,24 @@ Registers migrations to be executed inside transactions.
 
 Registers migrations to be executed without any transaction.
 
+## SQL migrations
+
+SQL migrations are automatically picked up if placed in the same folder with `main.go` or Go migrations. SQL migrations must have one of the following extensions:
+- .up.sql - up migration;
+- .down.sql - down migration;
+- .tx.up.sql - transactional up migration;
+- .tx.down.sql - transactional down migration.
+
+By default SQL migrations are executed as single PostgreSQL statement. `--gopg:split` directive can be used to split migration into several statements:
+
+```sql
+SET statement_timeout = 60000;
+SET lock_timeout = 60000;
+
+--gopg:split
+
+CREATE INDEX CONCURRENTLY ...;
+```
 
 ## Transactions
 
