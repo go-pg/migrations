@@ -256,7 +256,9 @@ func newSQLMigration(path string) func(DB) error {
 		if len(queries) > 1 {
 			switch v := db.(type) {
 			case *pg.DB:
-				db = v.Conn()
+				conn := v.Conn()
+				defer conn.Close()
+				db = conn
 			}
 		}
 
