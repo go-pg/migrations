@@ -5,6 +5,11 @@
 
 This package allows you to run migrations on your PostgreSQL database using [Golang Postgres client](https://github.com/go-pg/pg). See [example](example) for details.
 
+# Installation
+
+```shell
+go get -u github.com/go-pg/migrations
+```
 
 # Example
 
