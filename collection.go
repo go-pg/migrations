@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	"github.com/go-pg/pg"
-	"github.com/go-pg/pg/types"
 )
 
 type Migration struct {
@@ -36,24 +35,31 @@ func (m *Migration) String() string {
 }
 
 type Collection struct {
-	_tableName              string
+	tableName               string
 	sqlAutodiscoverDisabled bool
 
 	mu          sync.Mutex
 	visitedDirs map[string]struct{}
-	migrations  []*Migration
+	migrations  []*Migration // unsorted
 }
 
 func NewCollection(migrations ...*Migration) *Collection {
 	return &Collection{
-		_tableName: "gopg_migrations",
+		tableName:  "gopg_migrations",
 		migrations: migrations,
 	}
 }
 
 func (c *Collection) SetTableName(tableName string) *Collection {
-	c._tableName = tableName
+	c.tableName = tableName
 	return c
+}
+
+func (c *Collection) schemaName() string {
+	if ind := strings.IndexByte(c.tableName, '.'); ind >= 0 {
+		return c.tableName[:ind]
+	}
+	return "public"
 }
 
 func (c *Collection) DisableSQLAutodiscover(flag bool) *Collection {
@@ -62,13 +68,12 @@ func (c *Collection) DisableSQLAutodiscover(flag bool) *Collection {
 }
 
 // Register registers new database migration. Must be called
-// from file with name like "1_initialize_db.go", where:
-//   - 1 - migration version;
-//   - initialize_db - comment.
+// from a file with name like "1_initialize_db.go".
 func (c *Collection) Register(fns ...func(DB) error) error {
 	return c.register(false, fns...)
 }
 
+// RegisterTx is like Register, but migration will be run in a transaction.
 func (c *Collection) RegisterTx(fns ...func(DB) error) error {
 	return c.register(true, fns...)
 }
@@ -293,6 +298,7 @@ func (c *Collection) Migrations() []*Migration {
 	// Make a copy to avoid side effects.
 	migrations := make([]*Migration, len(c.migrations))
 	copy(migrations, c.migrations)
+
 	return migrations
 }
 
@@ -326,7 +332,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		return
 	case "create":
 		if len(a) < 2 {
-			fmt.Println("Please enter migration description")
+			fmt.Println("please provide migration description")
 			return
 		}
 
@@ -341,34 +347,39 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 			return
 		}
 
-		fmt.Println("created migration", filename)
+		fmt.Println("created new migration", filename)
 		return
 	}
 
-	tx, err := c.lockTable(db)
+	exists, err := c.tableExists(db)
+	if err != nil {
+		return
+	}
+	if !exists {
+		err = fmt.Errorf("table %q does not exists; did you run init?", c.tableName)
+		return
+	}
+
+	tx, version, err := c.begin(db)
 	if err != nil {
 		return
 	}
 	defer tx.Rollback()
 
-	oldVersion, err = c.Version(tx)
-	if err != nil {
-		return
-	}
-	newVersion = oldVersion
+	oldVersion = version
+	newVersion = version
 
 	switch cmd {
 	case "version":
 	case "up":
-		var target int64 = math.MaxInt64
+		target := int64(math.MaxInt64)
 		if len(a) > 1 {
 			target, err = strconv.ParseInt(a[1], 10, 64)
 			if err != nil {
 				return
 			}
-			if oldVersion > target {
-				err = fmt.Errorf("old version is bigger than target")
-				return
+			if version > target {
+				break
 			}
 		}
 
@@ -376,15 +387,16 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 			if m.Version > target {
 				break
 			}
-			if m.Version <= oldVersion {
-				continue
-			}
 
 			if tx == nil {
-				tx, err = c.lockTable(db)
+				tx, version, err = c.begin(db)
 				if err != nil {
 					return
 				}
+			}
+
+			if m.Version <= version {
+				continue
 			}
 
 			newVersion, err = c.runUp(db, tx, m)
@@ -399,15 +411,14 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 			tx = nil
 		}
 	case "down":
-		newVersion, err = c.down(db, tx, migrations, oldVersion)
+		newVersion, err = c.down(db, tx, migrations, version)
 		if err != nil {
 			return
 		}
 	case "reset":
-		version := oldVersion
 		for {
 			if tx == nil {
-				tx, err = c.lockTable(db)
+				tx, version, err = c.begin(db)
 				if err != nil {
 					return
 				}
@@ -527,15 +538,23 @@ func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion 
 	return c.runDown(db, tx, m)
 }
 
-func (c *Collection) tableName() types.ValueAppender {
-	return pg.Q(c._tableName)
+func (c *Collection) tableExists(db DB) (bool, error) {
+	n, err := db.Model().
+		Table("pg_tables").
+		Where("schemaname = ?", c.schemaName()).
+		Where("tablename = ?", c.tableName).
+		Count()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
 }
 
 func (c *Collection) Version(db DB) (int64, error) {
 	var version int64
 	_, err := db.QueryOne(pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
-	`, c.tableName())
+	`, pg.Q(c.tableName))
 	if err != nil {
 		if err == pg.ErrNoRows {
 			return 0, nil
@@ -548,41 +567,47 @@ func (c *Collection) Version(db DB) (int64, error) {
 func (c *Collection) SetVersion(db DB, version int64) error {
 	_, err := db.Exec(`
 		INSERT INTO ? (version, created_at) VALUES (?, now())
-	`, c.tableName(), version)
+	`, pg.Q(c.tableName), version)
 	return err
 }
 
 func (c *Collection) createTable(db DB) error {
-	if ind := strings.IndexByte(c._tableName, '.'); ind >= 0 {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(c._tableName[:ind]))
+	if schema := c.schemaName(); schema != "public" {
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(schema))
 		if err != nil {
 			return err
 		}
 	}
 
 	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS ? (
+		CREATE TABLE ? (
 			id serial,
 			version bigint,
 			created_at timestamptz
 		)
-	`, c.tableName())
+	`, pg.Q(c.tableName))
 	return err
 }
 
-func (c *Collection) lockTable(db DB) (*pg.Tx, error) {
+func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 	tx, err := db.Begin()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	_, err = tx.Exec("LOCK TABLE ?", c.tableName())
+	_, err = tx.Exec("LOCK TABLE ?", pg.Q(c.tableName))
 	if err != nil {
 		_ = tx.Rollback()
-		return nil, err
+		return nil, 0, err
 	}
 
-	return tx, nil
+	version, err := c.Version(tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, 0, err
+	}
+
+	return tx, version, nil
 }
 
 func extractVersionGo(name string) (int64, error) {
