@@ -55,11 +55,11 @@ func (c *Collection) SetTableName(tableName string) *Collection {
 	return c
 }
 
-func (c *Collection) schemaName() string {
+func (c *Collection) schemaTableName() (string, string) {
 	if ind := strings.IndexByte(c.tableName, '.'); ind >= 0 {
-		return c.tableName[:ind]
+		return c.tableName[:ind], c.tableName[ind+1:]
 	}
-	return "public"
+	return "public", c.tableName
 }
 
 func (c *Collection) DisableSQLAutodiscover(flag bool) *Collection {
@@ -539,10 +539,11 @@ func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion 
 }
 
 func (c *Collection) tableExists(db DB) (bool, error) {
+	schema, table := c.schemaTableName()
 	n, err := db.Model().
 		Table("pg_tables").
-		Where("schemaname = ?", c.schemaName()).
-		Where("tablename = ?", c.tableName).
+		Where("schemaname = ?", schema).
+		Where("tablename = ?", table).
 		Count()
 	if err != nil {
 		return false, err
@@ -572,7 +573,8 @@ func (c *Collection) SetVersion(db DB, version int64) error {
 }
 
 func (c *Collection) createTable(db DB) error {
-	if schema := c.schemaName(); schema != "public" {
+	schema, _ := c.schemaTableName()
+	if schema != "public" {
 		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(schema))
 		if err != nil {
 			return err
