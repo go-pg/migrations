@@ -542,8 +542,8 @@ func (c *Collection) tableExists(db DB) (bool, error) {
 	schema, table := c.schemaTableName()
 	n, err := db.Model().
 		Table("pg_tables").
-		Where("schemaname = ?", schema).
-		Where("tablename = ?", table).
+		Where("schemaname = '?'", pg.Q(schema)).
+		Where("tablename = '?'", pg.Q(table)).
 		Count()
 	if err != nil {
 		return false, err
