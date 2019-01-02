@@ -13,13 +13,16 @@ go get -u github.com/go-pg/migrations
 
 # Example
 
-You need to create database `pg_migrations_example` before running this example.
+You need to create database `pg_migrations_example` before running the [example](example).
 
 ```bash
+> cd example
+
 > psql -c "CREATE DATABASE pg_migrations_example"
 CREATE DATABASE
 
 > go run *.go init
+version is 0
 
 > go run *.go version
 version is 0
