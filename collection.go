@@ -597,6 +597,12 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 		return nil, 0, err
 	}
 
+	_, err = tx.Exec("SET idle_in_transaction_session_timeout = 0")
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, 0, err
+	}
+
 	_, err = tx.Exec("LOCK TABLE ?", pg.Q(c.tableName))
 	if err != nil {
 		_ = tx.Rollback()
