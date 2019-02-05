@@ -105,7 +105,6 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 		return err
 	}
 
-	c.mu.Lock()
 	c.addMigration(&Migration{
 		Version: version,
 
@@ -115,7 +114,6 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 		DownTx: tx,
 		Down:   down,
 	})
-	c.mu.Unlock()
 
 	return nil
 }
