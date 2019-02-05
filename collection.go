@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,14 +39,17 @@ type Collection struct {
 
 	mu          sync.Mutex
 	visitedDirs map[string]struct{}
-	migrations  []*Migration // unsorted
+	migrations  []*Migration // sorted
 }
 
 func NewCollection(migrations ...*Migration) *Collection {
-	return &Collection{
-		tableName:  "gopg_migrations",
-		migrations: migrations,
+	c := &Collection{
+		tableName: "gopg_migrations",
 	}
+	for _, m := range migrations {
+		c.addMigration(m)
+	}
+	return c
 }
 
 func (c *Collection) SetTableName(tableName string) *Collection {
@@ -104,9 +106,7 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.migrations = append(c.migrations, &Migration{
+	c.addMigration(&Migration{
 		Version: version,
 
 		UpTx: tx,
@@ -115,6 +115,7 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 		DownTx: tx,
 		Down:   down,
 	})
+	c.mu.Unlock()
 
 	return nil
 }
@@ -139,22 +140,10 @@ func migrationFile() string {
 }
 
 func (c *Collection) discoverSQLMigrations(file string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.sqlAutodiscoverDisabled {
-		return nil
-	}
-
 	dir := filepath.Dir(file)
-	if _, ok := c.visitedDirs[dir]; ok {
+	if c.isVisitedDir(dir) {
 		return nil
 	}
-
-	if c.visitedDirs == nil {
-		c.visitedDirs = make(map[string]struct{})
-	}
-	c.visitedDirs[dir] = struct{}{}
 
 	var ms []*Migration
 	newMigration := func(version int64) *Migration {
@@ -217,8 +206,31 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 		return err
 	}
 
-	c.migrations = append(c.migrations, ms...)
+	for _, m := range ms {
+		c.addMigration(m)
+	}
+
 	return nil
+}
+
+func (c *Collection) isVisitedDir(dir string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.sqlAutodiscoverDisabled {
+		return true
+	}
+
+	if _, ok := c.visitedDirs[dir]; ok {
+		return true
+	}
+
+	if c.visitedDirs == nil {
+		c.visitedDirs = make(map[string]struct{})
+	}
+	c.visitedDirs[dir] = struct{}{}
+
+	return false
 }
 
 func newSQLMigration(path string) func(DB) error {
@@ -277,6 +289,27 @@ func newSQLMigration(path string) func(DB) error {
 	}
 }
 
+func (c *Collection) addMigration(migration *Migration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for i, m := range c.migrations {
+		if m.Version > migration.Version {
+			c.migrations = insert(c.migrations, i, migration)
+			return
+		}
+	}
+
+	c.migrations = append(c.migrations, migration)
+}
+
+func insert(s []*Migration, i int, x *Migration) []*Migration {
+	s = append(s, nil)
+	copy(s[i+1:], s[i:])
+	s[i] = x
+	return s
+}
+
 func (c *Collection) MustRegister(fns ...func(DB) error) {
 	err := c.Register(fns...)
 	if err != nil {
@@ -292,6 +325,8 @@ func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
 }
 
 func (c *Collection) Migrations() []*Migration {
+	_ = c.discoverSQLMigrations(migrationFile())
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -303,16 +338,7 @@ func (c *Collection) Migrations() []*Migration {
 }
 
 func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
-	err = c.discoverSQLMigrations(migrationFile())
-	if err != nil {
-		return
-	}
-
 	migrations := c.Migrations()
-	sort.Slice(migrations, func(i, j int) bool {
-		return migrations[i].Version < migrations[j].Version
-	})
-
 	err = validateMigrations(migrations)
 	if err != nil {
 		return

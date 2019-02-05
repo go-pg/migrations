@@ -111,9 +111,9 @@ func TestSetVersion(t *testing.T) {
 	db := connectDB()
 
 	coll := migrations.NewCollection([]*migrations.Migration{
+		{Version: 3, Up: doPanic, Down: doPanic},
 		{Version: 1, Up: doPanic, Down: doPanic},
 		{Version: 2, Up: doPanic, Down: doPanic},
-		{Version: 3, Up: doPanic, Down: doPanic},
 	}...)
 
 	for i := 0; i < 5; i++ {
