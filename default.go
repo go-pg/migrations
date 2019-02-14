@@ -37,7 +37,7 @@ func MustRegisterTx(fns ...func(DB) error) {
 
 // RegisteredMigrations returns currently registered Migrations.
 func RegisteredMigrations() []*Migration {
-	return DefaultCollection.Migrations()
+	return DefaultCollection.Migrations("")
 }
 
 // Run runs command on the db. Supported commands are:
@@ -47,5 +47,15 @@ func RegisteredMigrations() []*Migration {
 // - version - prints current db version.
 // - set_version - sets db version without running migrations.
 func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
-	return DefaultCollection.Run(db, a...)
+	return DefaultCollection.Run(db, "", a...)
+}
+
+// RunWithCustomPath runs command on the db. Supported commands are using a custom path to locate the migrations:
+// - up [target] - runs all available migrations by default or up to target one if argument is provided.
+// - down - reverts last migration.
+// - reset - reverts all migrations.
+// - version - prints current db version.
+// - set_version - sets db version without running migrations.
+func RunWithCustomPath(db DB, migrationsPath string, a ...string) (oldVersion, newVersion int64, err error) {
+	return DefaultCollection.Run(db, migrationsPath, a...)
 }

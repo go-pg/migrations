@@ -138,7 +138,25 @@ func migrationFile() string {
 }
 
 func (c *Collection) discoverSQLMigrations(file string) error {
-	dir := filepath.Dir(file)
+
+	f, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	var dir string
+	if fi.IsDir() {
+		dir = file //file is already a dir
+	} else {
+		dir = filepath.Dir(file)
+	}
+
 	if c.isVisitedDir(dir) {
 		return nil
 	}
@@ -158,10 +176,11 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 		return ms[len(ms)-1]
 	}
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if info == nil || info.IsDir() {
 			return nil
 		}
+
 		if !strings.HasSuffix(path, ".sql") {
 			return nil
 		}
@@ -322,8 +341,12 @@ func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
 	}
 }
 
-func (c *Collection) Migrations() []*Migration {
-	_ = c.discoverSQLMigrations(migrationFile())
+func (c *Collection) Migrations(migrationsPath string) []*Migration {
+	if migrationsPath != "" {
+		_ = c.discoverSQLMigrations(migrationsPath)
+	} else {
+		_ = c.discoverSQLMigrations(migrationFile())
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -335,8 +358,8 @@ func (c *Collection) Migrations() []*Migration {
 	return migrations
 }
 
-func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
-	migrations := c.Migrations()
+func (c *Collection) Run(db DB, migrationsPath string, a ...string) (oldVersion, newVersion int64, err error) {
+	migrations := c.Migrations(migrationsPath)
 	err = validateMigrations(migrations)
 	if err != nil {
 		return
