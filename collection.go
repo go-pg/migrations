@@ -349,6 +349,10 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 
 	switch cmd {
 	case "init":
+		if len(a) < 2 {
+			fmt.Println("please provide migration description")
+			return
+		}
 		err = c.createTable(db)
 		if err != nil {
 			return
@@ -373,6 +377,10 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 
 		fmt.Println("created new migration", filename)
 		return
+	}
+
+	case "migrate":
+		cmd = "up"
 	}
 
 	exists, err := c.tableExists(db)
