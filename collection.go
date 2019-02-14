@@ -377,10 +377,9 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 
 		fmt.Println("created new migration", filename)
 		return
-	}
-
 	case "migrate":
 		cmd = "up"
+		return
 	}
 
 	exists, err := c.tableExists(db)
