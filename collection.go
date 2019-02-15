@@ -95,6 +95,7 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 	}
 
 	file := migrationFile()
+	fmt.Println(file)
 	version, err := extractVersionGo(file)
 	if err != nil {
 		return err
@@ -377,9 +378,6 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 
 		fmt.Println("created new migration", filename)
 		return
-	case "migrate":
-		cmd = "up"
-		return
 	}
 
 	exists, err := c.tableExists(db)
@@ -402,9 +400,9 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 
 	switch cmd {
 	case "version":
-	case "up":
+	case "up", "migrate":
 		target := int64(math.MaxInt64)
-		if len(a) > 1 {
+		if len(a) > 1 && a[0] != "migrate" {
 			target, err = strconv.ParseInt(a[1], 10, 64)
 			if err != nil {
 				return
