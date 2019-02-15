@@ -95,9 +95,9 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 	}
 
 	file := migrationFile()
-	fmt.Println(file)
 	version, err := extractVersionGo(file)
 	if err != nil {
+		fmt.Println("here")
 		return err
 	}
 
@@ -130,7 +130,7 @@ func migrationFile() string {
 		if !ok {
 			break
 		}
-		if !strings.Contains(f.Function, "/go-pg/migrations") {
+		if !strings.Contains(f.Function, "/kminevskiy/migrations") {
 			return f.File
 		}
 	}
@@ -350,10 +350,6 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 
 	switch cmd {
 	case "init":
-		if len(a) < 2 {
-			fmt.Println("please provide migration description")
-			return
-		}
 		err = c.createTable(db)
 		if err != nil {
 			return
