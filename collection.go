@@ -178,44 +178,45 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 
 		fileName := f.Name()
 		if !strings.HasSuffix(fileName, ".sql") {
-			return nil
+			continue
 		}
 
-		base := filepath.Base(fileName)
-		idx := strings.IndexByte(base, '_')
+		idx := strings.IndexByte(fileName, '_')
 		if idx == -1 {
 			err := fmt.Errorf(
 				"file=%q must have name in format version_comment, e.g. 1_initial",
-				base)
+				fileName)
 			return err
 		}
 
-		version, err := strconv.ParseInt(base[:idx], 10, 64)
+		version, err := strconv.ParseInt(fileName[:idx], 10, 64)
 		if err != nil {
 			return err
 		}
 
 		m := newMigration(version)
+		filePath := filepath.Join(dir, fileName)
 
-		if strings.HasSuffix(base, ".up.sql") {
+		if strings.HasSuffix(fileName, ".up.sql") {
 			if m.Up != nil {
 				return fmt.Errorf("migration=%d already has Up func", version)
 			}
-			m.UpTx = strings.HasSuffix(base, ".tx.up.sql")
-			m.Up = newSQLMigration(fileName)
+			m.UpTx = strings.HasSuffix(fileName, ".tx.up.sql")
+			m.Up = newSQLMigration(filePath)
 			continue
 		}
 
-		if strings.HasSuffix(base, ".down.sql") {
+		if strings.HasSuffix(fileName, ".down.sql") {
 			if m.Down != nil {
 				return fmt.Errorf("migration=%d already has Down func", version)
 			}
-			m.DownTx = strings.HasSuffix(base, ".tx.down.sql")
-			m.Down = newSQLMigration(fileName)
+			m.DownTx = strings.HasSuffix(fileName, ".tx.down.sql")
+			m.Down = newSQLMigration(filePath)
 			continue
 		}
 
-		return fmt.Errorf("file=%q must have extension .up.sql or .down.sql", base)
+		return fmt.Errorf(
+			"file=%q must have extension .up.sql or .down.sql", fileName)
 	}
 
 	for _, m := range ms {
@@ -241,9 +242,9 @@ func (c *Collection) isVisitedDir(dir string) bool {
 	return false
 }
 
-func newSQLMigration(fileName string) func(DB) error {
+func newSQLMigration(filePath string) func(DB) error {
 	return func(db DB) error {
-		f, err := os.Open(fileName)
+		f, err := os.Open(filePath)
 		if err != nil {
 			return err
 		}
