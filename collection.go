@@ -166,19 +166,26 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 		return ms[len(ms)-1]
 	}
 
-	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if info == nil || info.IsDir() {
-			return nil
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range files {
+		if f.IsDir() {
+			continue
 		}
-		if !strings.HasSuffix(path, ".sql") {
+
+		fileName := f.Name()
+		if !strings.HasSuffix(fileName, ".sql") {
 			return nil
 		}
 
-		base := filepath.Base(path)
+		base := filepath.Base(fileName)
 		idx := strings.IndexByte(base, '_')
 		if idx == -1 {
 			err := fmt.Errorf(
-				"file=%q must have name in format version_comment, e.c. 1_initial",
+				"file=%q must have name in format version_comment, e.g. 1_initial",
 				base)
 			return err
 		}
@@ -189,27 +196,26 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 		}
 
 		m := newMigration(version)
+
 		if strings.HasSuffix(base, ".up.sql") {
 			if m.Up != nil {
 				return fmt.Errorf("migration=%d already has Up func", version)
 			}
 			m.UpTx = strings.HasSuffix(base, ".tx.up.sql")
-			m.Up = newSQLMigration(path)
-			return nil
+			m.Up = newSQLMigration(fileName)
+			continue
 		}
+
 		if strings.HasSuffix(base, ".down.sql") {
 			if m.Down != nil {
 				return fmt.Errorf("migration=%d already has Down func", version)
 			}
 			m.DownTx = strings.HasSuffix(base, ".tx.down.sql")
-			m.Down = newSQLMigration(path)
-			return nil
+			m.Down = newSQLMigration(fileName)
+			continue
 		}
 
 		return fmt.Errorf("file=%q must have extension .up.sql or .down.sql", base)
-	})
-	if err != nil {
-		return err
 	}
 
 	for _, m := range ms {
@@ -235,9 +241,9 @@ func (c *Collection) isVisitedDir(dir string) bool {
 	return false
 }
 
-func newSQLMigration(path string) func(DB) error {
+func newSQLMigration(fileName string) func(DB) error {
 	return func(db DB) error {
-		f, err := os.Open(path)
+		f, err := os.Open(fileName)
 		if err != nil {
 			return err
 		}
@@ -287,6 +293,7 @@ func newSQLMigration(path string) func(DB) error {
 				return err
 			}
 		}
+
 		return nil
 	}
 }
