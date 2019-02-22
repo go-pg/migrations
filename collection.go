@@ -100,9 +100,11 @@ func (c *Collection) register(tx bool, fns ...func(DB) error) error {
 		return err
 	}
 
-	err = c.discoverSQLMigrations(file)
-	if err != nil {
-		return err
+	if !c.sqlAutodiscoverDisabled {
+		err = c.DiscoverSQLMigrations(filepath.Dir(file))
+		if err != nil {
+			return err
+		}
 	}
 
 	c.addMigration(&Migration{
@@ -137,13 +139,14 @@ func migrationFile() string {
 	return ""
 }
 
-func (c *Collection) discoverSQLMigrations(file string) error {
-	file, err := filepath.Abs(file)
+// DiscoverSQLMigrations scan the dir for files with .sql extension
+// and adds discovered SQL migrations to the collection.
+func (c *Collection) DiscoverSQLMigrations(dir string) error {
+	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return err
 	}
 
-	dir := filepath.Dir(file)
 	if c.isVisitedDir(dir) {
 		return nil
 	}
@@ -219,10 +222,6 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 func (c *Collection) isVisitedDir(dir string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	if c.sqlAutodiscoverDisabled {
-		return true
-	}
 
 	if _, ok := c.visitedDirs[dir]; ok {
 		return true
@@ -328,7 +327,9 @@ func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
 }
 
 func (c *Collection) Migrations() []*Migration {
-	_ = c.discoverSQLMigrations(migrationFile())
+	if !c.sqlAutodiscoverDisabled {
+		_ = c.DiscoverSQLMigrations(filepath.Dir(migrationFile()))
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
