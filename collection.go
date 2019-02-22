@@ -138,6 +138,11 @@ func migrationFile() string {
 }
 
 func (c *Collection) discoverSQLMigrations(file string) error {
+	file, err := filepath.Abs(file)
+	if err != nil {
+		return err
+	}
+
 	dir := filepath.Dir(file)
 	if c.isVisitedDir(dir) {
 		return nil
@@ -158,7 +163,7 @@ func (c *Collection) discoverSQLMigrations(file string) error {
 		return ms[len(ms)-1]
 	}
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if info == nil || info.IsDir() {
 			return nil
 		}
