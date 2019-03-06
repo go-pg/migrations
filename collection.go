@@ -35,6 +35,7 @@ func (m *Migration) String() string {
 
 type Collection struct {
 	tableName               string
+	schemaName              string
 	sqlAutodiscoverDisabled bool
 
 	mu          sync.Mutex
@@ -44,7 +45,8 @@ type Collection struct {
 
 func NewCollection(migrations ...*Migration) *Collection {
 	c := &Collection{
-		tableName: "gopg_migrations",
+		tableName:  "gopg_migrations",
+		schemaName: "public",
 	}
 	for _, m := range migrations {
 		c.addMigration(m)
@@ -57,11 +59,16 @@ func (c *Collection) SetTableName(tableName string) *Collection {
 	return c
 }
 
+func (c *Collection) SetSchemaName(schemaName string) *Collection {
+	c.schemaName = schemaName
+	return c
+}
+
 func (c *Collection) schemaTableName() (string, string) {
 	if ind := strings.IndexByte(c.tableName, '.'); ind >= 0 {
 		return c.tableName[:ind], c.tableName[ind+1:]
 	}
-	return "public", c.tableName
+	return c.schemaName, c.tableName
 }
 
 func (c *Collection) DisableSQLAutodiscover(flag bool) *Collection {
@@ -615,7 +622,7 @@ func (c *Collection) SetVersion(db DB, version int64) error {
 }
 
 func (c *Collection) createTable(db DB) error {
-	schema, _ := c.schemaTableName()
+	schema, table := c.schemaTableName()
 	if schema != "public" {
 		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(schema))
 		if err != nil {
@@ -623,13 +630,18 @@ func (c *Collection) createTable(db DB) error {
 		}
 	}
 
-	_, err := db.Exec(`
+	_, err := db.Exec(`set schema '?'`, pg.Q(schema))
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
 		CREATE TABLE ? (
 			id serial,
 			version bigint,
 			created_at timestamptz
 		)
-	`, pg.Q(c.tableName))
+	`, pg.Q(table))
 	return err
 }
 
