@@ -152,6 +152,7 @@ func TestSetSchema(t *testing.T) {
 		{"default schema", "", "public", "gopg_migrations"},
 		{"set specific schema", "testschema", "testschema", "gopg_migrations"},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
 
