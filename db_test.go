@@ -2,9 +2,8 @@ package migrations_test
 
 import (
 	"fmt"
-	"testing"
-
 	"github.com/go-pg/migrations"
+	"testing"
 
 	"github.com/go-pg/pg"
 )
@@ -139,6 +138,55 @@ func TestSetVersion(t *testing.T) {
 		if version != wantNewVersion {
 			t.Fatalf("got version %d, wanted %d", version, wantNewVersion)
 		}
+	}
+}
+
+func TestSetSchema(t *testing.T) {
+
+	cases := []struct {
+		desc           string
+		targetSchema   string
+		expectedSchema string
+		expectedTable  string
+	}{
+		{"default schema", "", "public", "gopg_migrations"},
+		{"set specific schema", "testschema", "testschema", "gopg_migrations"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+
+			db := pg.Connect(&pg.Options{
+				User: "postgres",
+			})
+
+			expectedSchema := tc.expectedSchema
+			expectedTable := tc.expectedTable
+
+			coll := migrations.DefaultCollection
+			if tc.targetSchema != "" {
+				coll.SetSchemaName(tc.targetSchema)
+			}
+
+			_, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s.%s", expectedSchema, expectedTable))
+			if err != nil {
+				t.Fatalf("error dropping table: %s", err.Error())
+			}
+
+			_, _, err = coll.Run(db, "init")
+			if err != nil {
+				t.Fatalf("problem in init: %s", err.Error())
+			}
+
+			n, err := db.Model().
+				Table("pg_tables").
+				Where("schemaname = '?'", pg.Q(expectedSchema)).
+				Where("tablename = '?'", pg.Q(expectedTable)).
+				Count()
+
+			if n != 1 {
+				t.Fatalf("did not find expected table: %s.%s", expectedSchema, expectedTable)
+			}
+		})
 	}
 }
 
