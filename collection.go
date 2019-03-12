@@ -635,10 +635,16 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 		return nil, 0, err
 	}
 
+	// If there is an error setting this, rollback the transaction and don't bother doing it
+	// becuase Postgres < 9.6 doesn't support this
 	_, err = tx.Exec("SET idle_in_transaction_session_timeout = 0")
 	if err != nil {
 		_ = tx.Rollback()
-		return nil, 0, err
+
+		tx, err = db.Begin()
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 
 	_, err = tx.Exec("LOCK TABLE ?", pg.Q(c.tableName))
