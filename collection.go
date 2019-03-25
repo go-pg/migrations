@@ -647,10 +647,18 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 		}
 	}
 
+	// If there is an error setting this, rollback the transaction and don't bother doing it
+	// because CockroachDB doesn't support it
 	_, err = tx.Exec("LOCK TABLE ?", pg.Q(c.tableName))
 	if err != nil {
 		_ = tx.Rollback()
-		return nil, 0, err
+		if !strings.Contains(err.Error(), "syntax error at or near \"lock\"") {
+			return nil, 0, err
+		}
+		tx, err = db.Begin()
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 
 	version, err := c.Version(tx)
