@@ -151,6 +151,10 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 		return nil
 	}
 
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil
+	}
+
 	var ms []*Migration
 	newMigration := func(version int64) *Migration {
 		for i := range ms {
