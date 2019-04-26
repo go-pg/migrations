@@ -11,6 +11,41 @@ This package allows you to run migrations on your PostgreSQL database using [Gol
 go get -u github.com/go-pg/migrations
 ```
 
+# Usage
+
+To run migrations on your project you should fulfill the following steps:
+
+1. define the migration list;
+1. implement an executable app that calls migration tool;
+1. run migrations.
+
+## Define Migrations
+
+### Migration Files
+
+You can save SQL migration files at the same directory as your `main.go` file, they should have proper file extensions ([more about migration files](#sql-migrations)).
+
+### Registered Migrations
+
+Migrations can be registered in the code using `migrations.RegisterTx` and `migrations.MustRegisterTx` functions. [More details](#registering-migrations)  about migration registering.
+
+## Implement app to run the tool
+
+You can run migrations from any place of your app or ecosystem. It can be a standalone application of a part of a big program, or maybe an HTTP handler, etc. Check [example](#example) for some helpful information about practical usage.
+
+## Run Migrations
+
+Run migration tool by providing CLI arguments to the `migrations.Run` function.
+
+Currently, the following arguments are supported:
+
+- `up` - runs all available migrations;
+- `up [target]` - runs available migrations up to the target one;
+- `down` - reverts last migration;
+- `reset` - reverts all migrations;
+- `version` - prints current db version;
+- `set_version [version]` - sets db version without running migrations.
+
 # Example
 
 You need to create database `pg_migrations_example` before running the [example](example).
