@@ -8,11 +8,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	pathpkg "path"
 	"testing"
 	"time"
-	pathpkg "path"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestVfs(t *testing.T) {
@@ -20,7 +18,9 @@ func TestVfs(t *testing.T) {
 	DefaultCollection.DiscoverSQLMigrationsFromFilesystem(Assets, "/not-existing-dir")
 	DefaultCollection.DiscoverSQLMigrationsFromFilesystem(Assets, "/")
 	m := DefaultCollection.Migrations()
-	assert.Equal(t, 1, len(m))
+	if len(m) != 1 {
+		t.Fatal("could not init migrations from filesystem")
+	}
 }
 
 // Assets statically implements the virtual filesystem provided to vfsgen.
