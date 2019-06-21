@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -142,6 +144,12 @@ func migrationFile() string {
 // DiscoverSQLMigrations scan the dir for files with .sql extension
 // and adds discovered SQL migrations to the collection.
 func (c *Collection) DiscoverSQLMigrations(dir string) error {
+	return c.DiscoverSQLMigrationsFromFilesystem(osfilesystem{}, dir)
+}
+
+// DiscoverSQLMigrations scan the dir from the given filesystem for files with .sql extension
+// and adds discovered SQL migrations to the collection.
+func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir string) error {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return err
@@ -151,7 +159,16 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 		return nil
 	}
 
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
+	f, err := fs.Open(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := f.Stat(); os.IsNotExist(err) {
 		return nil
 	}
 
@@ -170,10 +187,11 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 		return ms[len(ms)-1]
 	}
 
-	files, err := ioutil.ReadDir(dir)
+	files, err := f.Readdir(-1)
 	if err != nil {
 		return err
 	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
 	for _, f := range files {
 		if f.IsDir() {
@@ -206,7 +224,7 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 				return fmt.Errorf("migration=%d already has Up func", version)
 			}
 			m.UpTx = strings.HasSuffix(fileName, ".tx.up.sql")
-			m.Up = newSQLMigration(filePath)
+			m.Up = newSQLMigration(fs, filePath)
 			continue
 		}
 
@@ -215,7 +233,7 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 				return fmt.Errorf("migration=%d already has Down func", version)
 			}
 			m.DownTx = strings.HasSuffix(fileName, ".tx.down.sql")
-			m.Down = newSQLMigration(filePath)
+			m.Down = newSQLMigration(fs, filePath)
 			continue
 		}
 
@@ -246,9 +264,9 @@ func (c *Collection) isVisitedDir(dir string) bool {
 	return false
 }
 
-func newSQLMigration(filePath string) func(DB) error {
+func newSQLMigration(fs http.FileSystem, filePath string) func(DB) error {
 	return func(db DB) error {
-		f, err := os.Open(filePath)
+		f, err := fs.Open(filePath)
 		if err != nil {
 			return err
 		}
@@ -735,3 +753,11 @@ func init() {
 	})
 }
 `)
+
+type osfilesystem struct {
+
+}
+
+func (osfilesystem) Open(name string) (http.File, error) {
+	return os.Open(name)
+}
