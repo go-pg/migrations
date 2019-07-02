@@ -16,7 +16,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-pg/pg"
+	"github.com/go-pg/pg/v9"
 )
 
 type Migration struct {
@@ -406,7 +406,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 	if err != nil {
 		return
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() //nolint
 
 	oldVersion = version
 	newVersion = version
