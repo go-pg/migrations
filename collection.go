@@ -191,6 +191,8 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 	if err != nil {
 		return err
 	}
+
+	// Sort files to have consistent errors.
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
 	for _, f := range files {
@@ -754,9 +756,7 @@ func init() {
 }
 `)
 
-type osfilesystem struct {
-
-}
+type osfilesystem struct{}
 
 func (osfilesystem) Open(name string) (http.File, error) {
 	return os.Open(name)
