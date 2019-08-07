@@ -28,5 +28,4 @@ type DB interface {
 	CopyTo(w io.Writer, query interface{}, params ...interface{}) (orm.Result, error)
 
 	Context() context.Context
-	orm.QueryFormatter
 }
