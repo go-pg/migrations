@@ -360,6 +360,8 @@ func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
 
 func (c *Collection) Migrations() []*Migration {
 	if !c.sqlAutodiscoverDisabled {
+		_ = c.DiscoverSQLMigrations(filepath.Dir(migrationFile()))
+
 		dir, err := os.Getwd()
 		if err == nil {
 			_ = c.DiscoverSQLMigrations(dir)
