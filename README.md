@@ -7,8 +7,10 @@ This package allows you to run migrations on your PostgreSQL database using [Gol
 
 # Installation
 
+go-pg/migrations requires a Go version with [Modules](https://github.com/golang/go/wiki/Modules) support and uses import path versioning. So please make sure to initialize a Go module:
+
 ```shell
-go get -u github.com/go-pg/migrations
+go get -u github.com/go-pg/migrations/v7
 ```
 
 # Usage
