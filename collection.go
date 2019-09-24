@@ -609,8 +609,8 @@ func (c *Collection) tableExists(db DB) (bool, error) {
 	schema, table := c.schemaTableName()
 	n, err := db.Model().
 		Table("pg_tables").
-		Where("schemaname = '?'", pg.Q(schema)).
-		Where("tablename = '?'", pg.Q(table)).
+		Where("schemaname = '?'", pg.Safe(schema)).
+		Where("tablename = '?'", pg.Safe(table)).
 		Count()
 	if err != nil {
 		return false, err
@@ -622,7 +622,7 @@ func (c *Collection) Version(db DB) (int64, error) {
 	var version int64
 	_, err := db.QueryOne(pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
-	`, pg.Q(c.tableName))
+	`, pg.Safe(c.tableName))
 	if err != nil {
 		if err == pg.ErrNoRows {
 			return 0, nil
@@ -635,14 +635,14 @@ func (c *Collection) Version(db DB) (int64, error) {
 func (c *Collection) SetVersion(db DB, version int64) error {
 	_, err := db.Exec(`
 		INSERT INTO ? (version, created_at) VALUES (?, now())
-	`, pg.Q(c.tableName), version)
+	`, pg.Safe(c.tableName), version)
 	return err
 }
 
 func (c *Collection) createTable(db DB) error {
 	schema, _ := c.schemaTableName()
 	if schema != "public" {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(schema))
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Safe(schema))
 		if err != nil {
 			return err
 		}
@@ -654,7 +654,7 @@ func (c *Collection) createTable(db DB) error {
 			version bigint,
 			created_at timestamptz
 		)
-	`, pg.Q(c.tableName))
+	`, pg.Safe(c.tableName))
 	return err
 }
 
@@ -678,7 +678,7 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 
 	// If there is an error setting this, rollback the transaction and don't bother doing it
 	// because CockroachDB doesn't support it
-	_, err = tx.Exec("LOCK TABLE ?", pg.Q(c.tableName))
+	_, err = tx.Exec("LOCK TABLE ?", pg.Safe(c.tableName))
 	if err != nil {
 		_ = tx.Rollback()
 		if !strings.Contains(err.Error(), "syntax error at or near \"lock\"") {
