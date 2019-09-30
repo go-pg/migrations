@@ -431,7 +431,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 	if err != nil {
 		return
 	}
-	defer tx.Rollback() //nolint
+	defer tx.Close() //nolint
 
 	oldVersion = version
 	newVersion = version
@@ -681,6 +681,7 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 	_, err = tx.Exec("LOCK TABLE ?", pg.SafeQuery(c.tableName))
 	if err != nil {
 		_ = tx.Rollback()
+
 		if !strings.Contains(err.Error(), "syntax error at or near \"lock\"") {
 			return nil, 0, err
 		}
