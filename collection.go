@@ -363,7 +363,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 
 	switch cmd {
 	case "init":
-		err = c.createTable(db)
+		err = c.createTableExistsOk(db)
 		if err != nil {
 			return
 		}
@@ -611,14 +611,9 @@ func (c *Collection) SetVersion(db DB, version int64) error {
 }
 
 func (c *Collection) createTable(db DB) error {
-	schema, _ := c.schemaTableName()
-	if schema != "public" {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(schema))
-		if err != nil {
-			return err
-		}
+	if err := c.createSchema(db); err != nil {
+		return nil
 	}
-
 	_, err := db.Exec(`
 		CREATE TABLE ? (
 			id serial,
@@ -627,6 +622,33 @@ func (c *Collection) createTable(db DB) error {
 		)
 	`, pg.Q(c.tableName))
 	return err
+}
+
+func (c *Collection) createTableExistsOk(db DB) error {
+	if err := c.createSchema(db); err != nil {
+		return nil
+	}
+
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS ? (
+			id serial,
+			version bigint,
+			created_at timestamptz
+		)
+	`, pg.Q(c.tableName))
+	return err
+}
+
+func (c *Collection) createSchema(db DB) error {
+	schema, _ := c.schemaTableName()
+	if schema != "public" {
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.Q(schema))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
