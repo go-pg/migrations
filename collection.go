@@ -649,7 +649,7 @@ func (c *Collection) createTable(db DB) error {
 	}
 
 	_, err := db.Exec(`
-		CREATE TABLE ? (
+		CREATE TABLE IF NOT EXISTS ? (
 			id serial,
 			version bigint,
 			created_at timestamptz
