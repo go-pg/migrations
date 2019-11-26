@@ -665,7 +665,7 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 	}
 
 	// If there is an error setting this, rollback the transaction and don't bother doing it
-	// becuase Postgres < 9.6 doesn't support this
+	// because Postgres < 9.6 doesn't support this
 	_, err = tx.Exec("SET idle_in_transaction_session_timeout = 0")
 	if err != nil {
 		_ = tx.Rollback()
@@ -682,7 +682,7 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 	if err != nil {
 		_ = tx.Rollback()
 
-		if !strings.Contains(err.Error(), "syntax error at or near \"lock\"") {
+		if !strings.Contains(err.Error(), "at or near \"lock\"") {
 			return nil, 0, err
 		}
 		tx, err = db.Begin()
