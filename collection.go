@@ -658,6 +658,9 @@ func (c *Collection) createTable(db DB) error {
 	return err
 }
 
+const cockroachdbErrorMatch = `at or near "lock"`
+const yugabytedbErrorMatch = `lock mode not supported yet`
+
 func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 	tx, err := db.Begin()
 	if err != nil {
@@ -675,14 +678,13 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 			return nil, 0, err
 		}
 	}
-
 	// If there is an error setting this, rollback the transaction and don't bother doing it
-	// because CockroachDB doesn't support it
+	// because neither CockroachDB nor Yugabyte support it
 	_, err = tx.Exec("LOCK TABLE ?", pg.SafeQuery(c.tableName))
 	if err != nil {
 		_ = tx.Rollback()
 
-		if !strings.Contains(err.Error(), "at or near \"lock\"") {
+		if !strings.Contains(err.Error(), cockroachdbErrorMatch) && !strings.Contains(err.Error(), yugabytedbErrorMatch) {
 			return nil, 0, err
 		}
 		tx, err = db.Begin()
