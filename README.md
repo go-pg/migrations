@@ -9,8 +9,9 @@ This package allows you to run migrations on your PostgreSQL database using [Gol
 
 go-pg/migrations requires a Go version with [Modules](https://github.com/golang/go/wiki/Modules) support and uses import path versioning. So please make sure to initialize a Go module:
 
-```shell
-go get -u github.com/go-pg/migrations/v7
+``` shell
+go mod init github.com/my/repo
+go get github.com/go-pg/migrations/v7
 ```
 
 # Usage
@@ -52,7 +53,7 @@ Currently, the following arguments are supported:
 
 You need to create database `pg_migrations_example` before running the [example](example).
 
-```bash
+``` bash
 > cd example
 
 > psql -c "CREATE DATABASE pg_migrations_example"
@@ -123,7 +124,7 @@ SQL migrations are automatically picked up if placed in the same folder with `ma
 
 By default SQL migrations are executed as single PostgreSQL statement. `--gopg:split` directive can be used to split migration into several statements:
 
-```sql
+``` sql
 SET statement_timeout = 60000;
 SET lock_timeout = 60000;
 
@@ -138,7 +139,7 @@ By default, the migrations are executed outside without any transactions. Indivi
 
 ### Global Transactions
 
-```go
+``` go
 var oldVersion, newVersion int64
 
 err := db.RunInTransaction(func(tx *pg.Tx) (err error) {
