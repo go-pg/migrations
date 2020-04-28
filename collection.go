@@ -535,13 +535,13 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 }
 
 func validateMigrations(migrations []*Migration) error {
-	versions := make(map[int64]struct{})
-	for _, migration := range migrations {
-		version := migration.Version
-		if _, ok := versions[version]; ok {
-			return fmt.Errorf("multiple migrations with version=%d", version)
+	versions := make(map[int64]struct{}, len(migrations))
+	for _, m := range migrations {
+		if _, ok := versions[m.Version]; ok {
+			return fmt.Errorf(
+				"there are multiple migrations with version=%d", m.Version)
 		}
-		versions[version] = struct{}{}
+		versions[m.Version] = struct{}{}
 	}
 	return nil
 }
