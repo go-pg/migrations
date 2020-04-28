@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/go-pg/pg/v9"
-	"github.com/go-pg/pg/v9/orm"
+	"github.com/go-pg/pg/v10"
+	"github.com/go-pg/pg/v10/orm"
 )
 
 // DB is a common interface for pg.DB and pg.Tx types.
