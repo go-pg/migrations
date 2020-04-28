@@ -607,15 +607,11 @@ func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion 
 
 func (c *Collection) tableExists(db DB) (bool, error) {
 	schema, table := c.schemaTableName()
-	n, err := db.Model().
+	return db.Model().
 		Table("pg_tables").
 		Where("schemaname = '?'", pg.SafeQuery(schema)).
 		Where("tablename = '?'", pg.SafeQuery(table)).
-		Count()
-	if err != nil {
-		return false, err
-	}
-	return n == 1, nil
+		Exists()
 }
 
 func (c *Collection) Version(db DB) (int64, error) {
