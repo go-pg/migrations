@@ -382,6 +382,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 	migrations := c.Migrations()
 	err = validateMigrations(migrations)
 	if err != nil {
+		fmt.Println(fmt.Sprintf("migrations validation failed: %s", err.Error()))
 		return
 	}
 
