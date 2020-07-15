@@ -11,11 +11,6 @@ import (
 // DB is a common interface for pg.DB and pg.Tx types.
 type DB interface {
 	Model(model ...interface{}) *orm.Query
-	Select(model interface{}) error
-	Insert(model ...interface{}) error
-	Update(model interface{}) error
-	Delete(model interface{}) error
-	ForceDelete(model interface{}) error
 
 	Exec(query interface{}, params ...interface{}) (orm.Result, error)
 	ExecOne(query interface{}, params ...interface{}) (orm.Result, error)
