@@ -680,7 +680,7 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 	}
 	// If there is an error setting this, rollback the transaction and don't bother doing it
 	// because neither CockroachDB nor Yugabyte support it
-	_, err = tx.Exec("LOCK TABLE ?", pg.SafeQuery(c.tableName))
+	_, err = tx.Exec("LOCK TABLE ? IN EXCLUSIVE MODE", pg.SafeQuery(c.tableName))
 	if err != nil {
 		_ = tx.Rollback()
 
