@@ -4,16 +4,13 @@ addons:
   postgresql: "9.6"
 
 go:
-  - 1.13.x
   - 1.14.x
+  - 1.15.x
   - tip
 
 matrix:
   allow_failures:
     - go: tip
-
-env:
-  - GO111MODULE=on
 
 go_import_path: github.com/go-pg/migrations
 
