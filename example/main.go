@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -31,7 +32,9 @@ func main() {
 		Database: "pg_migrations_example",
 	})
 
-	oldVersion, newVersion, err := migrations.Run(db, flag.Args()...)
+	ctx := context.Background()
+
+	oldVersion, newVersion, err := migrations.Run(ctx, db, flag.Args()...)
 	if err != nil {
 		exitf(err.Error())
 	}
