@@ -3,6 +3,7 @@ package migrations
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -18,17 +19,17 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-pg/pg/v10"
+	"github.com/go-pg/pg/v11"
 )
 
 type Migration struct {
 	Version int64
 
 	UpTx bool
-	Up   func(DB) error
+	Up   func(context.Context, DB) error
 
 	DownTx bool
-	Down   func(DB) error
+	Down   func(context.Context, DB) error
 }
 
 func (m *Migration) String() string {
@@ -73,17 +74,18 @@ func (c *Collection) DisableSQLAutodiscover(flag bool) *Collection {
 
 // Register registers new database migration. Must be called
 // from a file with name like "1_initialize_db.go".
-func (c *Collection) Register(fns ...func(DB) error) error {
+func (c *Collection) Register(fns ...func(context.Context, DB) error) error {
 	return c.register(false, fns...)
 }
 
 // RegisterTx is like Register, but migration will be run in a transaction.
-func (c *Collection) RegisterTx(fns ...func(DB) error) error {
+func (c *Collection) RegisterTx(fns ...func(context.Context, DB) error) error {
 	return c.register(true, fns...)
 }
 
-func (c *Collection) register(tx bool, fns ...func(DB) error) error {
-	var up, down func(DB) error
+func (c *Collection) register(tx bool, fns ...func(context.Context, DB) error) error {
+	var up, down func(context.Context, DB) error
+
 	switch len(fns) {
 	case 0:
 		return errors.New("Register expects at least 1 arg")
@@ -266,8 +268,8 @@ func (c *Collection) isVisitedDir(dir string) bool {
 	return false
 }
 
-func newSQLMigration(fs http.FileSystem, filePath string) func(DB) error {
-	return func(db DB) error {
+func newSQLMigration(fs http.FileSystem, filePath string) func(context.Context, DB) error {
+	return func(ctx context.Context, db DB) error {
 		f, err := fs.Open(filePath)
 		if err != nil {
 			return err
@@ -307,13 +309,13 @@ func newSQLMigration(fs http.FileSystem, filePath string) func(DB) error {
 			switch v := db.(type) {
 			case *pg.DB:
 				conn := v.Conn()
-				defer conn.Close()
+				defer conn.Close(ctx)
 				db = conn
 			}
 		}
 
 		for _, q := range queries {
-			_, err = db.Exec(q)
+			_, err = db.Exec(ctx, q)
 			if err != nil {
 				return err
 			}
@@ -344,14 +346,14 @@ func insert(s []*Migration, i int, x *Migration) []*Migration {
 	return s
 }
 
-func (c *Collection) MustRegister(fns ...func(DB) error) {
+func (c *Collection) MustRegister(fns ...func(context.Context, DB) error) {
 	err := c.Register(fns...)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
+func (c *Collection) MustRegisterTx(fns ...func(context.Context, DB) error) {
 	err := c.RegisterTx(fns...)
 	if err != nil {
 		panic(err)
@@ -378,7 +380,9 @@ func (c *Collection) Migrations() []*Migration {
 	return migrations
 }
 
-func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
+func (c *Collection) Run(
+	ctx context.Context, db DB, a ...string,
+) (oldVersion, newVersion int64, err error) {
 	migrations := c.Migrations()
 	err = validateMigrations(migrations)
 	if err != nil {
@@ -392,7 +396,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 
 	switch cmd {
 	case "init":
-		err = c.createTable(db)
+		err = c.createTable(ctx, db)
 		if err != nil {
 			return
 		}
@@ -418,7 +422,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		return
 	}
 
-	exists, err := c.tableExists(db)
+	exists, err := c.tableExists(ctx, db)
 	if err != nil {
 		return
 	}
@@ -427,11 +431,11 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		return
 	}
 
-	tx, version, err := c.begin(db)
+	tx, version, err := c.begin(ctx, db)
 	if err != nil {
 		return
 	}
-	defer tx.Close() //nolint
+	defer tx.Close(ctx) //nolint
 
 	oldVersion = version
 	newVersion = version
@@ -456,7 +460,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 			}
 
 			if tx == nil {
-				tx, version, err = c.begin(db)
+				tx, version, err = c.begin(ctx, db)
 				if err != nil {
 					return
 				}
@@ -466,37 +470,37 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 				continue
 			}
 
-			newVersion, err = c.runUp(db, tx, m)
+			newVersion, err = c.runUp(ctx, db, tx, m)
 			if err != nil {
 				return
 			}
 
-			err = tx.Commit()
+			err = tx.Commit(ctx)
 			if err != nil {
 				return
 			}
 			tx = nil
 		}
 	case "down":
-		newVersion, err = c.down(db, tx, migrations, version)
+		newVersion, err = c.down(ctx, db, tx, migrations, version)
 		if err != nil {
 			return
 		}
 	case "reset":
 		for {
 			if tx == nil {
-				tx, version, err = c.begin(db)
+				tx, version, err = c.begin(ctx, db)
 				if err != nil {
 					return
 				}
 			}
 
-			newVersion, err = c.down(db, tx, migrations, version)
+			newVersion, err = c.down(ctx, db, tx, migrations, version)
 			if err != nil {
 				return
 			}
 
-			err = tx.Commit()
+			err = tx.Commit(ctx)
 			if err != nil {
 				return
 			}
@@ -517,7 +521,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		if err != nil {
 			return
 		}
-		err = c.SetVersion(tx, newVersion)
+		err = c.SetVersion(ctx, tx, newVersion)
 		if err != nil {
 			return
 		}
@@ -529,7 +533,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 	}
 
 	if tx != nil {
-		err = tx.Commit()
+		err = tx.Commit(ctx)
 	}
 	return
 }
@@ -546,12 +550,12 @@ func validateMigrations(migrations []*Migration) error {
 	return nil
 }
 
-func (c *Collection) runUp(db DB, tx *pg.Tx, m *Migration) (int64, error) {
+func (c *Collection) runUp(ctx context.Context, db DB, tx *pg.Tx, m *Migration) (int64, error) {
 	if m.UpTx {
 		db = tx
 	}
-	return c.run(tx, func() (int64, error) {
-		err := m.Up(db)
+	return c.run(ctx, tx, func() (int64, error) {
+		err := m.Up(ctx, db)
 		if err != nil {
 			return 0, err
 		}
@@ -559,13 +563,13 @@ func (c *Collection) runUp(db DB, tx *pg.Tx, m *Migration) (int64, error) {
 	})
 }
 
-func (c *Collection) runDown(db DB, tx *pg.Tx, m *Migration) (int64, error) {
+func (c *Collection) runDown(ctx context.Context, db DB, tx *pg.Tx, m *Migration) (int64, error) {
 	if m.DownTx {
 		db = tx
 	}
-	return c.run(tx, func() (int64, error) {
+	return c.run(ctx, tx, func() (int64, error) {
 		if m.Down != nil {
-			err := m.Down(db)
+			err := m.Down(ctx, db)
 			if err != nil {
 				return 0, err
 			}
@@ -575,17 +579,19 @@ func (c *Collection) runDown(db DB, tx *pg.Tx, m *Migration) (int64, error) {
 }
 
 func (c *Collection) run(
-	tx *pg.Tx, fn func() (int64, error),
+	ctx context.Context, tx *pg.Tx, fn func() (int64, error),
 ) (newVersion int64, err error) {
 	newVersion, err = fn()
 	if err != nil {
 		return
 	}
-	err = c.SetVersion(tx, newVersion)
+	err = c.SetVersion(ctx, tx, newVersion)
 	return
 }
 
-func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion int64) (int64, error) {
+func (c *Collection) down(
+	ctx context.Context, db DB, tx *pg.Tx, migrations []*Migration, oldVersion int64,
+) (int64, error) {
 	if oldVersion == 0 {
 		return 0, nil
 	}
@@ -602,21 +608,21 @@ func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion 
 	if m == nil {
 		return oldVersion, nil
 	}
-	return c.runDown(db, tx, m)
+	return c.runDown(ctx, db, tx, m)
 }
 
-func (c *Collection) tableExists(db DB) (bool, error) {
+func (c *Collection) tableExists(ctx context.Context, db DB) (bool, error) {
 	schema, table := c.schemaTableName()
 	return db.Model().
 		Table("pg_tables").
 		Where("schemaname = '?'", pg.SafeQuery(schema)).
 		Where("tablename = '?'", pg.SafeQuery(table)).
-		Exists()
+		Exists(ctx)
 }
 
-func (c *Collection) Version(db DB) (int64, error) {
+func (c *Collection) Version(ctx context.Context, db DB) (int64, error) {
 	var version int64
-	_, err := db.QueryOne(pg.Scan(&version), `
+	_, err := db.QueryOne(ctx, pg.Scan(&version), `
 		SELECT version FROM ? ORDER BY id DESC LIMIT 1
 	`, pg.SafeQuery(c.tableName))
 	if err != nil {
@@ -628,23 +634,23 @@ func (c *Collection) Version(db DB) (int64, error) {
 	return version, nil
 }
 
-func (c *Collection) SetVersion(db DB, version int64) error {
-	_, err := db.Exec(`
+func (c *Collection) SetVersion(ctx context.Context, db DB, version int64) error {
+	_, err := db.Exec(ctx, `
 		INSERT INTO ? (version, created_at) VALUES (?, now())
 	`, pg.SafeQuery(c.tableName), version)
 	return err
 }
 
-func (c *Collection) createTable(db DB) error {
+func (c *Collection) createTable(ctx context.Context, db DB) error {
 	schema, _ := c.schemaTableName()
 	if schema != "public" {
-		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.SafeQuery(schema))
+		_, err := db.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS ?`, pg.SafeQuery(schema))
 		if err != nil {
 			return err
 		}
 	}
 
-	_, err := db.Exec(`
+	_, err := db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS ? (
 			id serial,
 			version bigint,
@@ -659,41 +665,41 @@ const (
 	yugabytedbErrorMatch  = `lock mode not supported yet`
 )
 
-func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
-	tx, err := db.Begin()
+func (c *Collection) begin(ctx context.Context, db DB) (*pg.Tx, int64, error) {
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// If there is an error setting this, rollback the transaction and don't bother doing it
 	// because Postgres < 9.6 doesn't support this
-	_, err = tx.Exec("SET idle_in_transaction_session_timeout = 0")
+	_, err = tx.Exec(ctx, "SET idle_in_transaction_session_timeout = 0")
 	if err != nil {
-		_ = tx.Rollback()
+		_ = tx.Rollback(ctx)
 
-		tx, err = db.Begin()
+		tx, err = db.Begin(ctx)
 		if err != nil {
 			return nil, 0, err
 		}
 	}
 	// If there is an error setting this, rollback the transaction and don't bother doing it
 	// because neither CockroachDB nor Yugabyte support it
-	_, err = tx.Exec("LOCK TABLE ? IN EXCLUSIVE MODE", pg.SafeQuery(c.tableName))
+	_, err = tx.Exec(ctx, "LOCK TABLE ? IN EXCLUSIVE MODE", pg.SafeQuery(c.tableName))
 	if err != nil {
-		_ = tx.Rollback()
+		_ = tx.Rollback(ctx)
 
 		if !strings.Contains(err.Error(), cockroachdbErrorMatch) && !strings.Contains(err.Error(), yugabytedbErrorMatch) {
 			return nil, 0, err
 		}
-		tx, err = db.Begin()
+		tx, err = db.Begin(ctx)
 		if err != nil {
 			return nil, 0, err
 		}
 	}
 
-	version, err := c.Version(tx)
+	version, err := c.Version(ctx, tx)
 	if err != nil {
-		_ = tx.Rollback()
+		_ = tx.Rollback(ctx)
 		return nil, 0, err
 	}
 

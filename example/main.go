@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-pg/migrations/v8"
-	"github.com/go-pg/pg/v10"
+	"github.com/go-pg/migrations/v9"
+	"github.com/go-pg/pg/v11"
 )
 
 const usageText = `This program runs command on the db. Supported commands are:

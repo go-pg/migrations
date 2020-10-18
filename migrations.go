@@ -4,23 +4,21 @@ import (
 	"context"
 	"io"
 
-	"github.com/go-pg/pg/v10"
-	"github.com/go-pg/pg/v10/orm"
+	"github.com/go-pg/pg/v11"
+	"github.com/go-pg/pg/v11/orm"
 )
 
 // DB is a common interface for pg.DB and pg.Tx types.
 type DB interface {
 	Model(model ...interface{}) *orm.Query
 
-	Exec(query interface{}, params ...interface{}) (orm.Result, error)
-	ExecOne(query interface{}, params ...interface{}) (orm.Result, error)
-	Query(coll, query interface{}, params ...interface{}) (orm.Result, error)
-	QueryOne(model, query interface{}, params ...interface{}) (orm.Result, error)
+	Exec(ctx context.Context, query interface{}, params ...interface{}) (orm.Result, error)
+	ExecOne(ctx context.Context, query interface{}, params ...interface{}) (orm.Result, error)
+	Query(ctx context.Context, coll, query interface{}, params ...interface{}) (orm.Result, error)
+	QueryOne(ctx context.Context, model, query interface{}, params ...interface{}) (orm.Result, error)
 
-	Begin() (*pg.Tx, error)
+	Begin(ctx context.Context) (*pg.Tx, error)
 
-	CopyFrom(r io.Reader, query interface{}, params ...interface{}) (orm.Result, error)
-	CopyTo(w io.Writer, query interface{}, params ...interface{}) (orm.Result, error)
-
-	Context() context.Context
+	CopyFrom(ctx context.Context, r io.Reader, query interface{}, params ...interface{}) (orm.Result, error)
+	CopyTo(ctx context.Context, w io.Writer, query interface{}, params ...interface{}) (orm.Result, error)
 }

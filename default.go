@@ -1,37 +1,39 @@
 package migrations
 
+import "context"
+
 var DefaultCollection = NewCollection()
 
 func SetTableName(name string) {
 	DefaultCollection.SetTableName(name)
 }
 
-func Version(db DB) (int64, error) {
-	return DefaultCollection.Version(db)
+func Version(ctx context.Context, db DB) (int64, error) {
+	return DefaultCollection.Version(ctx, db)
 }
 
-func SetVersion(db DB, version int64) error {
-	return DefaultCollection.SetVersion(db, version)
+func SetVersion(ctx context.Context, db DB, version int64) error {
+	return DefaultCollection.SetVersion(ctx, db, version)
 }
 
 // Register registers new database migration. Must be called
 // from file with name like "1_initialize_db.go", where:
 //   - 1 - migration version;
 //   - initialize_db - comment.
-func Register(fns ...func(DB) error) error {
+func Register(fns ...func(context.Context, DB) error) error {
 	return DefaultCollection.Register(fns...)
 }
 
 // RegisterTx is just like Register but marks the migration to be executed inside a transaction.
-func RegisterTx(fns ...func(DB) error) error {
+func RegisterTx(fns ...func(context.Context, DB) error) error {
 	return DefaultCollection.RegisterTx(fns...)
 }
 
-func MustRegister(fns ...func(DB) error) {
+func MustRegister(fns ...func(context.Context, DB) error) {
 	DefaultCollection.MustRegister(fns...)
 }
 
-func MustRegisterTx(fns ...func(DB) error) {
+func MustRegisterTx(fns ...func(context.Context, DB) error) {
 	DefaultCollection.MustRegisterTx(fns...)
 }
 
@@ -46,6 +48,6 @@ func RegisteredMigrations() []*Migration {
 // - reset - reverts all migrations.
 // - version - prints current db version.
 // - set_version - sets db version without running migrations.
-func Run(db DB, a ...string) (oldVersion, newVersion int64, err error) {
-	return DefaultCollection.Run(db, a...)
+func Run(ctx context.Context, db DB, a ...string) (oldVersion, newVersion int64, err error) {
+	return DefaultCollection.Run(ctx, db, a...)
 }

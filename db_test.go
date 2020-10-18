@@ -1,25 +1,28 @@
 package migrations_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
-	"github.com/go-pg/migrations/v8"
+	"github.com/go-pg/migrations/v9"
 
-	"github.com/go-pg/pg/v10"
+	"github.com/go-pg/pg/v11"
 )
+
+var ctx = context.Background()
 
 func connectDB() *pg.DB {
 	db := pg.Connect(&pg.Options{
 		User: "postgres",
 	})
 
-	_, err := db.Exec("DROP TABLE IF EXISTS gopg_migrations")
+	_, err := db.Exec(ctx, "DROP TABLE IF EXISTS gopg_migrations")
 	if err != nil {
 		panic(err)
 	}
 
-	_, _, err = migrations.Run(db, "init")
+	_, _, err = migrations.Run(ctx, db, "init")
 	if err != nil {
 		panic(err)
 	}
@@ -30,7 +33,7 @@ func connectDB() *pg.DB {
 func TestVersion(t *testing.T) {
 	db := connectDB()
 
-	version, err := migrations.Version(db)
+	version, err := migrations.Version(ctx, db)
 	if err != nil {
 		t.Fatalf("Version failed: %s", err)
 	}
@@ -38,11 +41,11 @@ func TestVersion(t *testing.T) {
 		t.Fatalf("got version %d, wanted 0", version)
 	}
 
-	if err := migrations.SetVersion(db, 999); err != nil {
+	if err := migrations.SetVersion(ctx, db, 999); err != nil {
 		t.Fatalf("SetVersion failed: %s", err)
 	}
 
-	version, err = migrations.Version(db)
+	version, err = migrations.Version(ctx, db)
 	if err != nil {
 		t.Fatalf("Version failed: %s", err)
 	}
@@ -59,7 +62,7 @@ func TestUpDown(t *testing.T) {
 		{Version: 1, Up: doNothing, Down: doNothing},
 		{Version: 3, Up: doNothing, Down: doNothing},
 	}...)
-	oldVersion, newVersion, err := coll.Run(db, "up")
+	oldVersion, newVersion, err := coll.Run(ctx, db, "up")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +73,7 @@ func TestUpDown(t *testing.T) {
 		t.Fatalf("got %d, wanted 3", newVersion)
 	}
 
-	version, err := coll.Version(db)
+	version, err := coll.Version(ctx, db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +89,7 @@ func TestUpDown(t *testing.T) {
 			wantNewVersion = 0
 		}
 
-		oldVersion, newVersion, err = coll.Run(db, "down")
+		oldVersion, newVersion, err = coll.Run(ctx, db, "down")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +100,7 @@ func TestUpDown(t *testing.T) {
 			t.Fatalf("got %d, wanted %d", newVersion, wantNewVersion)
 		}
 
-		version, err = coll.Version(db)
+		version, err = coll.Version(ctx, db)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +124,7 @@ func TestSetVersion(t *testing.T) {
 		wantNewVersion := int64(i + 1)
 
 		oldVersion, newVersion, err := coll.Run(
-			db, "set_version", fmt.Sprint(wantNewVersion))
+			ctx, db, "set_version", fmt.Sprint(wantNewVersion))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,7 +135,7 @@ func TestSetVersion(t *testing.T) {
 			t.Fatalf("got %d, wanted %d", newVersion, wantNewVersion)
 		}
 
-		version, err := coll.Version(db)
+		version, err := coll.Version(ctx, db)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -142,10 +145,10 @@ func TestSetVersion(t *testing.T) {
 	}
 }
 
-func doNothing(db migrations.DB) error {
+func doNothing(ctx context.Context, db migrations.DB) error {
 	return nil
 }
 
-func doPanic(db migrations.DB) error {
+func doPanic(ctx context.Context, db migrations.DB) error {
 	panic("this migration should not be run")
 }
