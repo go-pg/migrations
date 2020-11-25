@@ -11,7 +11,7 @@ go-pg/migrations requires a Go version with [Modules](https://github.com/golang/
 
 ``` shell
 go mod init github.com/my/repo
-go get github.com/go-pg/migrations/v7
+go get github.com/go-pg/migrations/v8
 ```
 
 # Usage
