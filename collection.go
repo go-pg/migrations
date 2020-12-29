@@ -652,8 +652,8 @@ func (c *Collection) createTable(ctx context.Context, db DB) error {
 
 	_, err := db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS ? (
-			id serial,
-			version bigint,
+			id serial PRIMARY KEY,
+			version int,
 			created_at timestamptz
 		)
 	`, pg.SafeQuery(c.tableName))
@@ -682,6 +682,7 @@ func (c *Collection) begin(ctx context.Context, db DB) (*pg.Tx, int64, error) {
 			return nil, 0, err
 		}
 	}
+
 	// If there is an error setting this, rollback the transaction and don't bother doing it
 	// because neither CockroachDB nor Yugabyte support it
 	_, err = tx.Exec(ctx, "LOCK TABLE ? IN EXCLUSIVE MODE", pg.SafeQuery(c.tableName))
