@@ -5,11 +5,13 @@
 
 This package allows you to run migrations on your PostgreSQL database using [Golang Postgres client](https://github.com/go-pg/pg). See [example](example) for details.
 
+You may also want to check [go-pg-migrations](https://github.com/robinjoseph08/go-pg-migrations) before making a decision.
+
 # Installation
 
 go-pg/migrations requires a Go version with [Modules](https://github.com/golang/go/wiki/Modules) support and uses import path versioning. So please make sure to initialize a Go module:
 
-``` shell
+```shell
 go mod init github.com/my/repo
 go get github.com/go-pg/migrations/v7
 ```
@@ -30,7 +32,7 @@ You can save SQL migration files at the same directory as your `main.go` file, t
 
 ### Registered Migrations
 
-Migrations can be registered in the code using `migrations.RegisterTx` and `migrations.MustRegisterTx` functions. [More details](#registering-migrations)  about migration registering.
+Migrations can be registered in the code using `migrations.RegisterTx` and `migrations.MustRegisterTx` functions. [More details](#registering-migrations) about migration registering.
 
 ## Implement app to run the tool
 
@@ -53,7 +55,7 @@ Currently, the following arguments are supported:
 
 You need to create database `pg_migrations_example` before running the [example](example).
 
-``` bash
+```bash
 > cd example
 
 > psql -c "CREATE DATABASE pg_migrations_example"
@@ -109,7 +111,6 @@ created migration 5_add_email_to_users.go
 
 Registers migrations to be executed inside transactions.
 
-
 ### `migrations.Register` and `migrations.MustRegister`
 
 Registers migrations to be executed without any transaction.
@@ -117,6 +118,7 @@ Registers migrations to be executed without any transaction.
 ## SQL migrations
 
 SQL migrations are automatically picked up if placed in the same folder with `main.go` or Go migrations. SQL migrations must have one of the following extensions:
+
 - .up.sql - up migration;
 - .down.sql - down migration;
 - .tx.up.sql - transactional up migration;
@@ -124,7 +126,7 @@ SQL migrations are automatically picked up if placed in the same folder with `ma
 
 By default SQL migrations are executed as single PostgreSQL statement. `--gopg:split` directive can be used to split migration into several statements:
 
-``` sql
+```sql
 SET statement_timeout = 60000;
 SET lock_timeout = 60000;
 
@@ -139,7 +141,7 @@ By default, the migrations are executed outside without any transactions. Indivi
 
 ### Global Transactions
 
-``` go
+```go
 var oldVersion, newVersion int64
 
 err := db.RunInTransaction(func(tx *pg.Tx) (err error) {
