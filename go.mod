@@ -1,6 +1,6 @@
 module github.com/go-pg/migrations/v9
 
-go 1.11
+go 1.16
 
 require (
 	github.com/go-pg/pg/v11 v11.0.0-20201018104832-9db4369acefa
