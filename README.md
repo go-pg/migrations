@@ -117,7 +117,17 @@ Registers migrations to be executed without any transaction.
 
 ## SQL migrations
 
-SQL migrations are automatically picked up if placed in the same folder with `main.go` or Go migrations. SQL migrations must have one of the following extensions:
+SQL migrations are automatically picked up if placed in the same folder with `main.go` or Go migrations.
+SQL migrations may be manually registered using `DiscoverSQLMigrations` (from OS directory) or `DiscoverSQLMigrationsFromFilesystem`.
+It may be used with new go 1.16 embedding feature. Example:
+```go
+//go:embed migrations/*.sql
+var migrations embed.FS
+
+collection := migrations.NewCollection()
+collection.DiscoverSQLMigrationsFromFilesystem(http.FS(migrations), "migrations")
+```
+SQL migrations must have one of the following extensions:
 
 - .up.sql - up migration;
 - .down.sql - down migration;
