@@ -125,7 +125,7 @@ It may be used with new go 1.16 embedding feature. Example:
 var migrations embed.FS
 
 collection := migrations.NewCollection()
-collection.DiscoverSQLMigrationsFromFilesystem(http.FS(migrations), "migrations")
+collection.DiscoverSQLMigrationsFromFilesystem(http.FS(migrations), "/migrations")
 ```
 SQL migrations must have one of the following extensions:
 
