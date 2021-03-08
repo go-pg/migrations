@@ -749,7 +749,7 @@ func createMigrationFile(filename string) error {
 		return fmt.Errorf("file=%q already exists (%s)", filename, err)
 	}
 
-	return ioutil.WriteFile(filename, migrationTemplate, 0644)
+	return ioutil.WriteFile(filename, migrationTemplate, 0o644)
 }
 
 var migrationTemplate = []byte(`package main
