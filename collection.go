@@ -37,6 +37,7 @@ func (m *Migration) String() string {
 
 type Collection struct {
 	tableName               string
+	schemaName              string
 	sqlAutodiscoverDisabled bool
 
 	mu          sync.Mutex
@@ -44,9 +45,15 @@ type Collection struct {
 	migrations  []*Migration // sorted
 }
 
+const (
+	defaultTableName  = "gopg_migrations"
+	defaultSchemaName = "public"
+)
+
 func NewCollection(migrations ...*Migration) *Collection {
 	c := &Collection{
-		tableName: "gopg_migrations",
+		tableName:  defaultTableName,
+		schemaName: defaultSchemaName,
 	}
 	for _, m := range migrations {
 		c.addMigration(m)
@@ -59,11 +66,16 @@ func (c *Collection) SetTableName(tableName string) *Collection {
 	return c
 }
 
+func (c *Collection) SetSchemaName(schemaName string) *Collection {
+	c.schemaName = schemaName
+	return c
+}
+
 func (c *Collection) schemaTableName() (string, string) {
 	if ind := strings.IndexByte(c.tableName, '.'); ind >= 0 {
 		return c.tableName[:ind], c.tableName[ind+1:]
 	}
-	return "public", c.tableName
+	return c.schemaName, c.tableName
 }
 
 func (c *Collection) DisableSQLAutodiscover(flag bool) *Collection {
@@ -637,7 +649,7 @@ func (c *Collection) SetVersion(db DB, version int64) error {
 
 func (c *Collection) createTable(db DB) error {
 	schema, _ := c.schemaTableName()
-	if schema != "public" {
+	if schema != c.schemaName {
 		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.SafeQuery(schema))
 		if err != nil {
 			return err
