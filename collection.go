@@ -644,22 +644,19 @@ func (c *Collection) SetVersion(db DB, version int64) error {
 }
 
 func (c *Collection) createTable(db DB) error {
-	schema, _ := c.schemaTableName()
-
-	if schema != "public" {
-		exists, err := c.schemaExists(db)
+	exists, err := c.schemaExists(db)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		schema, _ := c.schemaTableName()
+		_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.SafeQuery(schema))
 		if err != nil {
 			return err
 		}
-		if !exists {
-			_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS ?`, pg.SafeQuery(schema))
-			if err != nil {
-				return err
-			}
-		}
 	}
 
-	_, err := db.Exec(`
+	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS ? (
 			id serial,
 			version bigint,
