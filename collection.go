@@ -427,7 +427,7 @@ func (c *Collection) Run(
 		return
 	}
 	if !exists {
-		err = fmt.Errorf("table %q does not exists; did you run init?", c.tableName)
+		err = fmt.Errorf("table %q does not exist; did you run init?", c.tableName)
 		return
 	}
 
@@ -611,6 +611,14 @@ func (c *Collection) down(
 	return c.runDown(ctx, db, tx, m)
 }
 
+func (c *Collection) schemaExists(ctx context.Context, db DB) (bool, error) {
+	schema, _ := c.schemaTableName()
+	return db.Model().
+		Table("information_schema.schemata").
+		Where("schema_name = '?'", pg.SafeQuery(schema)).
+		Exists(ctx)
+}
+
 func (c *Collection) tableExists(ctx context.Context, db DB) (bool, error) {
 	schema, table := c.schemaTableName()
 	return db.Model().
@@ -642,15 +650,19 @@ func (c *Collection) SetVersion(ctx context.Context, db DB, version int64) error
 }
 
 func (c *Collection) createTable(ctx context.Context, db DB) error {
-	schema, _ := c.schemaTableName()
-	if schema != "public" {
-		_, err := db.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS ?`, pg.SafeQuery(schema))
+	exists, err := c.schemaExists(ctx, db)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		schema, _ := c.schemaTableName()
+		_, err := db.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS ?", pg.SafeQuery(schema))
 		if err != nil {
 			return err
 		}
 	}
 
-	_, err := db.Exec(ctx, `
+	_, err = db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS ? (
 			id serial PRIMARY KEY,
 			version int,
