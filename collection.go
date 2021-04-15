@@ -149,7 +149,7 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 		return err
 	}
 
-	return c.DiscoverSQLMigrationsFromFilesystem(osfilesystem{}, dir)
+	return c.DiscoverSQLMigrationsFromFilesystem(osfilesystem{}, filepath.ToSlash(dir))
 }
 
 // DiscoverSQLMigrations scan the dir from the given filesystem for files with .sql extension
@@ -219,7 +219,7 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 		}
 
 		m := newMigration(version)
-		filePath := filepath.Join(dir, fileName)
+		filePath := path.Join(dir, fileName)
 
 		if strings.HasSuffix(fileName, ".up.sql") {
 			if m.Up != nil {
@@ -777,5 +777,5 @@ func init() {
 type osfilesystem struct{}
 
 func (osfilesystem) Open(name string) (http.File, error) {
-	return os.Open(name)
+	return os.Open(filepath.FromSlash(name))
 }
