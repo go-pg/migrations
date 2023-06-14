@@ -275,6 +275,8 @@ func newSQLMigration(fs http.FileSystem, filePath string) func(DB) error {
 		defer f.Close()
 
 		scanner := bufio.NewScanner(f)
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 1024*1024)
 
 		var query []byte
 		var queries []string
