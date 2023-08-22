@@ -385,6 +385,8 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		return
 	}
 
+	fmt.Println("c.Run: -------------- migrations: ", migrations)
+
 	fmt.Println("c.Run: ----------- a:", a)
 	cmd := "up"
 	if len(a) > 0 {
