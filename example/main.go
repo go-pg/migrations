@@ -34,6 +34,7 @@ func main() {
     })
 
 	oldVersion, newVersion, err := migrations.Run(db, flag.Args()...)
+	fmt.Println("example/main.go: --------------- oldVersion: ", oldVersion, ", newVersion: ", newVersion)
 	if err != nil {
 		exitf(err.Error())
 	}
