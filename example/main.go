@@ -35,6 +35,7 @@ func main() {
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
     })
 
+	fmt.Println("main.go: flag:Args(): ", flag.Args())
 	oldVersion, newVersion, err := migrations.Run(db, flag.Args()...)
 	fmt.Println("example/main.go: --------------- oldVersion: ", oldVersion, ", newVersion: ", newVersion)
 	if err != nil {

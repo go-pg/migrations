@@ -385,6 +385,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		return
 	}
 
+	fmt.Println("c.Run: ----------- a:", a)
 	cmd := "up"
 	if len(a) > 0 {
 		cmd = a[0]
@@ -409,6 +410,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		}
 
 		filename := fmtMigrationFilename(version+1, strings.Join(a[1:], "_"))
+		fmt.Println("c.Run: ----------------- filename: ", filename)
 		err = createMigrationFile(filename)
 		if err != nil {
 			return
