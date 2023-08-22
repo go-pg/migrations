@@ -27,9 +27,11 @@ func main() {
 	flag.Parse()
 
 	db := pg.Connect(&pg.Options{
-		User:     "postgres",
-		Database: "pg_migrations_example",
-	})
+        Addr:     "10.164.0.189:26257",
+        User:     "pvos_dia_db_rw",
+        Password: "c0f47960-9c78-4039-9760-c0ff390b3259_pvos_dia_db_rw",
+        Database: "pvos_dia_db",
+    })
 
 	oldVersion, newVersion, err := migrations.Run(db, flag.Args()...)
 	if err != nil {
