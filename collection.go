@@ -144,6 +144,7 @@ func migrationFile() string {
 // DiscoverSQLMigrations scan the dir for files with .sql extension
 // and adds discovered SQL migrations to the collection.
 func (c *Collection) DiscoverSQLMigrations(dir string) error {
+	fmt.Println("c.DiscoverSQlMigrations: ---------------------- dir: ", dir)
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return err
@@ -155,6 +156,7 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 // DiscoverSQLMigrations scan the dir from the given filesystem for files with .sql extension
 // and adds discovered SQL migrations to the collection.
 func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir string) error {
+	fmt.Println("c.DiscoverSQLMigrationsFromFilesystem function is called!!!!!!!!")
 	if c.isVisitedDir(dir) {
 		return nil
 	}
@@ -195,16 +197,19 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 	// Sort files to have consistent errors.
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
-	for _, f := range files {
+	for i, f := range files {
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: ---------------------- f: ", f, ", i: ", i)
 		if f.IsDir() {
 			continue
 		}
 
 		fileName := f.Name()
 		if !strings.HasSuffix(fileName, ".sql") {
+			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: -------------------- fileName", fileName, " does not have suffix .sql")
 			continue
 		}
 
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: ------------------ file", fileName, " running strings.IndeByte")
 		idx := strings.IndexByte(fileName, '_')
 		if idx == -1 {
 			err := fmt.Errorf(
@@ -214,10 +219,12 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 		}
 
 		version, err := strconv.ParseInt(fileName[:idx], 10, 64)
+
 		if err != nil {
 			return err
 		}
 
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: -------------  version", version)
 		m := newMigration(version)
 		filePath := filepath.Join(dir, fileName)
 
@@ -243,7 +250,8 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 			"file=%q must have extension .up.sql or .down.sql", fileName)
 	}
 
-	for _, m := range ms {
+	for i, m := range ms {
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: i:", i, ", m:", m)
 		c.addMigration(m)
 	}
 
@@ -254,6 +262,7 @@ func (c *Collection) isVisitedDir(dir string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	fmt.Println("c.isVisiteddir: ---------------- dir: ", dir, ", visitedDirs: ", c.visitedDirs)
 	if _, ok := c.visitedDirs[dir]; ok {
 		return true
 	}
