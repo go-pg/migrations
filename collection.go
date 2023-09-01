@@ -35,6 +35,10 @@ func (m *Migration) String() string {
 	return strconv.FormatInt(m.Version, 10)
 }
 
+func (m *Migration) PrintAsString() {
+	fmt.Println("Migration: Version: ", m.Version, ", UpTx: ", m.UpTx, ", func(DB) up: ", m.Up, ", DownTx: ", m.DownTx, ", func(DB) down", m.Down)
+}
+
 type Collection struct {
 	tableName               string
 	sqlAutodiscoverDisabled bool
@@ -176,6 +180,7 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 
 	var ms []*Migration
 	newMigration := func(version int64) *Migration {
+		fmt.Println("newMigration func is called, input version: ", version)
 		for i := range ms {
 			m := ms[i]
 			if m.Version == version {
@@ -198,14 +203,14 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
 	for i, f := range files {
-		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: ---------------------- f: ", f, ", i: ", i)
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: ---------------------- f: ", f, ", i: ", i, ", so continue to loop another file")
 		if f.IsDir() {
 			continue
 		}
 
 		fileName := f.Name()
 		if !strings.HasSuffix(fileName, ".sql") {
-			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: -------------------- fileName", fileName, " does not have suffix .sql")
+			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: -------------------- fileName", fileName, " does not have suffix .sql, so continue to loop another file")
 			continue
 		}
 
@@ -368,6 +373,7 @@ func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
 }
 
 func (c *Collection) Migrations() []*Migration {
+	fmt.Println("c.Migrations: ------------------ c.Migrations() is called.")
 	if !c.sqlAutodiscoverDisabled {
 		_ = c.DiscoverSQLMigrations(filepath.Dir(migrationFile()))
 
