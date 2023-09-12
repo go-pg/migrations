@@ -84,11 +84,13 @@ func (c *Collection) DisableSQLAutodiscover(flag bool) *Collection {
 // Register registers new database migration. Must be called
 // from a file with name like "1_initialize_db.go".
 func (c *Collection) Register(fns ...func(DB) error) error {
+	fmt.Println("c.Register is called!!!!!!")
 	return c.register(false, fns...)
 }
 
 // RegisterTx is like Register, but migration will be run in a transaction.
 func (c *Collection) RegisterTx(fns ...func(DB) error) error {
+	fmt.Println("c.RegisterTx is called!!!!!!")
 	return c.register(true, fns...)
 }
 
@@ -745,6 +747,7 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 }
 
 func extractVersionGo(name string) (int64, error) {
+	fmt.Println("extractVersionGo: name: ", name)
 	base := filepath.Base(name)
 	if !strings.HasSuffix(name, ".go") {
 		return 0, fmt.Errorf("file=%q must have extension .go", base)
