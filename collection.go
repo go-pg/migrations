@@ -56,7 +56,9 @@ func NewCollection(migrations ...*Migration) *Collection {
 	c := &Collection{
 		tableName: "gopg_migrations",
 	}
-	for _, m := range migrations {
+	fmt.Println("NewCollection(): len(migrations): ", len(migrations))
+	for i, m := range migrations {
+		m.PrintAsStringWithIndex(i)
 		c.addMigration(m)
 	}
 	return c
@@ -209,9 +211,6 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 	for i, f := range files {
 		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  f: ", f, ", i: ", i, ", so continue to loop another file")
 		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: current m []*Migrations:")
-		for j, m := range ms {
-
-		}
 
 		if f.IsDir() {
 			continue
@@ -219,14 +218,15 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 
 		fileName := f.Name()
 		if !strings.HasSuffix(fileName, ".sql") {
+			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: fileName", fileName, " does not have suffix .sql, so continue to loop another file")
+			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: len(ms): ", len(ms))
 			for i, m := range ms {
-				fmt("c.DiscoverSQLMigrationsFromFilesystem:")
+				m.PrintAsStringWithIndex(i)
 			}
-			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  fileName", fileName, " does not have suffix .sql, so continue to loop another file")
 			continue
 		}
 
-		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  file", fileName, " running strings.IndeByte")
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  file", fileName, " running strings.IndexByte")
 		idx := strings.IndexByte(fileName, '_')
 		if idx == -1 {
 			err := fmt.Errorf(
@@ -241,7 +241,7 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 			return err
 		}
 
-		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: -  version", version)
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: version", version)
 		m := newMigration(version)
 		filePath := filepath.Join(dir, fileName)
 
