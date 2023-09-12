@@ -209,7 +209,7 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
 	for i, f := range files {
-		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  f: ", f, ", i: ", i, ", so continue to loop another file")
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  f: ", f, ", i: ", i)
 		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: current m []*Migrations:")
 
 		if f.IsDir() {
