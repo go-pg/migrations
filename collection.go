@@ -339,6 +339,7 @@ func newSQLMigration(fs http.FileSystem, filePath string) func(DB) error {
 		}
 
 		for _, q := range queries {
+			fmt.Println("newSQLMigration: q: ", queries)
 			_, err = db.Exec(q)
 			if err != nil {
 				return err
