@@ -39,6 +39,10 @@ func (m *Migration) PrintAsString() {
 	fmt.Println("Migration: Version: ", m.Version, ", UpTx: ", m.UpTx, ", func(DB) up: ", m.Up, ", DownTx: ", m.DownTx, ", func(DB) down", m.Down)
 }
 
+func (m *Migration) PrintAsStringWithIndex(i int) {
+	fmt.Println("Migration: index: ", i, " Version: ", m.Version, ", UpTx: ", m.UpTx, ", func(DB) up: ", m.Up, ", DownTx: ", m.DownTx, ", func(DB) down", m.Down)
+}
+
 type Collection struct {
 	tableName               string
 	sqlAutodiscoverDisabled bool
@@ -148,7 +152,7 @@ func migrationFile() string {
 // DiscoverSQLMigrations scan the dir for files with .sql extension
 // and adds discovered SQL migrations to the collection.
 func (c *Collection) DiscoverSQLMigrations(dir string) error {
-	fmt.Println("c.DiscoverSQlMigrations: ---------------------- dir: ", dir)
+	fmt.Println("c.DiscoverSQlMigrations:  dir: ", dir)
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return err
@@ -203,18 +207,26 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
 	for i, f := range files {
-		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: ---------------------- f: ", f, ", i: ", i, ", so continue to loop another file")
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  f: ", f, ", i: ", i, ", so continue to loop another file")
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: current m []*Migrations:")
+		for j, m := range ms {
+
+		}
+
 		if f.IsDir() {
 			continue
 		}
 
 		fileName := f.Name()
 		if !strings.HasSuffix(fileName, ".sql") {
-			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: -------------------- fileName", fileName, " does not have suffix .sql, so continue to loop another file")
+			for i, m := range ms {
+				fmt("c.DiscoverSQLMigrationsFromFilesystem:")
+			}
+			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  fileName", fileName, " does not have suffix .sql, so continue to loop another file")
 			continue
 		}
 
-		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: ------------------ file", fileName, " running strings.IndeByte")
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  file", fileName, " running strings.IndeByte")
 		idx := strings.IndexByte(fileName, '_')
 		if idx == -1 {
 			err := fmt.Errorf(
@@ -229,7 +241,7 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 			return err
 		}
 
-		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: -------------  version", version)
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: -  version", version)
 		m := newMigration(version)
 		filePath := filepath.Join(dir, fileName)
 
@@ -267,7 +279,7 @@ func (c *Collection) isVisitedDir(dir string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	fmt.Println("c.isVisiteddir: ---------------- dir: ", dir, ", visitedDirs: ", c.visitedDirs)
+	fmt.Println("c.isVisiteddir:  dir: ", dir, ", visitedDirs: ", c.visitedDirs)
 	if _, ok := c.visitedDirs[dir]; ok {
 		return true
 	}
@@ -295,7 +307,7 @@ func newSQLMigration(fs http.FileSystem, filePath string) func(DB) error {
 		for scanner.Scan() {
 			b := scanner.Bytes()
 
-			const prefix = "--gopg:"
+			const prefix = "gopg:"
 			if bytes.HasPrefix(b, []byte(prefix)) {
 				b = b[len(prefix):]
 				if bytes.Equal(b, []byte("split")) {
@@ -373,7 +385,7 @@ func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
 }
 
 func (c *Collection) Migrations() []*Migration {
-	fmt.Println("c.Migrations: ------------------ c.Migrations() is called.")
+	fmt.Println("c.Migrations:  c.Migrations() is called.")
 	if !c.sqlAutodiscoverDisabled {
 		_ = c.DiscoverSQLMigrations(filepath.Dir(migrationFile()))
 
@@ -400,9 +412,9 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		return
 	}
 
-	fmt.Println("c.Run: -------------- migrations: ", migrations)
+	fmt.Println("c.Run:  migrations: ", migrations)
 
-	fmt.Println("c.Run: ----------- a:", a)
+	fmt.Println("c.Run: - a:", a)
 	cmd := "up"
 	if len(a) > 0 {
 		cmd = a[0]
@@ -427,7 +439,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		}
 
 		filename := fmtMigrationFilename(version+1, strings.Join(a[1:], "_"))
-		fmt.Println("c.Run: ----------------- filename: ", filename)
+		fmt.Println("c.Run: - filename: ", filename)
 		err = createMigrationFile(filename)
 		if err != nil {
 			return
