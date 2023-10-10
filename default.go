@@ -1,4 +1,5 @@
 package migrations
+import "fmt"
 
 var DefaultCollection = NewCollection()
 
@@ -32,6 +33,7 @@ func MustRegister(fns ...func(DB) error) {
 }
 
 func MustRegisterTx(fns ...func(DB) error) {
+	fmt.Println("MustRegisterTx function is called")
 	DefaultCollection.MustRegisterTx(fns...)
 }
 

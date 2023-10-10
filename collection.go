@@ -35,6 +35,14 @@ func (m *Migration) String() string {
 	return strconv.FormatInt(m.Version, 10)
 }
 
+func (m *Migration) PrintAsString() {
+	fmt.Println("Migration: Version: ", m.Version, ", UpTx: ", m.UpTx, ", func(DB) up: ", m.Up, ", DownTx: ", m.DownTx, ", func(DB) down", m.Down)
+}
+
+func (m *Migration) PrintAsStringWithIndex(i int) {
+	fmt.Println("Migration: index: ", i, " Version: ", m.Version, ", UpTx: ", m.UpTx, ", func(DB) up: ", m.Up, ", DownTx: ", m.DownTx, ", func(DB) down", m.Down)
+}
+
 type Collection struct {
 	tableName               string
 	sqlAutodiscoverDisabled bool
@@ -48,7 +56,9 @@ func NewCollection(migrations ...*Migration) *Collection {
 	c := &Collection{
 		tableName: "gopg_migrations",
 	}
-	for _, m := range migrations {
+	fmt.Println("NewCollection(): len(migrations): ", len(migrations))
+	for i, m := range migrations {
+		m.PrintAsStringWithIndex(i)
 		c.addMigration(m)
 	}
 	return c
@@ -74,11 +84,13 @@ func (c *Collection) DisableSQLAutodiscover(flag bool) *Collection {
 // Register registers new database migration. Must be called
 // from a file with name like "1_initialize_db.go".
 func (c *Collection) Register(fns ...func(DB) error) error {
+	fmt.Println("c.Register is called!!!!!!")
 	return c.register(false, fns...)
 }
 
 // RegisterTx is like Register, but migration will be run in a transaction.
 func (c *Collection) RegisterTx(fns ...func(DB) error) error {
+	fmt.Println("c.RegisterTx is called!!!!!!")
 	return c.register(true, fns...)
 }
 
@@ -144,6 +156,7 @@ func migrationFile() string {
 // DiscoverSQLMigrations scan the dir for files with .sql extension
 // and adds discovered SQL migrations to the collection.
 func (c *Collection) DiscoverSQLMigrations(dir string) error {
+	fmt.Println("c.DiscoverSQlMigrations:  dir: ", dir)
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return err
@@ -155,6 +168,7 @@ func (c *Collection) DiscoverSQLMigrations(dir string) error {
 // DiscoverSQLMigrations scan the dir from the given filesystem for files with .sql extension
 // and adds discovered SQL migrations to the collection.
 func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir string) error {
+	fmt.Println("c.DiscoverSQLMigrationsFromFilesystem function is called!!!!!!!!")
 	if c.isVisitedDir(dir) {
 		return nil
 	}
@@ -174,6 +188,7 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 
 	var ms []*Migration
 	newMigration := func(version int64) *Migration {
+		fmt.Println("newMigration func is called, input version: ", version)
 		for i := range ms {
 			m := ms[i]
 			if m.Version == version {
@@ -195,16 +210,25 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 	// Sort files to have consistent errors.
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
-	for _, f := range files {
+	for i, f := range files {
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  f: ", f, ", i: ", i)
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: current m []*Migrations:")
+
 		if f.IsDir() {
 			continue
 		}
 
 		fileName := f.Name()
 		if !strings.HasSuffix(fileName, ".sql") {
+			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: fileName", fileName, " does not have suffix .sql, so continue to loop another file")
+			fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: len(ms): ", len(ms))
+			for i, m := range ms {
+				m.PrintAsStringWithIndex(i)
+			}
 			continue
 		}
 
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem:  file", fileName, " running strings.IndexByte")
 		idx := strings.IndexByte(fileName, '_')
 		if idx == -1 {
 			err := fmt.Errorf(
@@ -214,10 +238,12 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 		}
 
 		version, err := strconv.ParseInt(fileName[:idx], 10, 64)
+
 		if err != nil {
 			return err
 		}
 
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: version", version)
 		m := newMigration(version)
 		filePath := filepath.Join(dir, fileName)
 
@@ -243,7 +269,8 @@ func (c *Collection) DiscoverSQLMigrationsFromFilesystem(fs http.FileSystem, dir
 			"file=%q must have extension .up.sql or .down.sql", fileName)
 	}
 
-	for _, m := range ms {
+	for i, m := range ms {
+		fmt.Println("c.DiscoverSQLMigrationsFromFilesystem: i:", i, ", m:", m)
 		c.addMigration(m)
 	}
 
@@ -254,6 +281,7 @@ func (c *Collection) isVisitedDir(dir string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	fmt.Println("c.isVisiteddir:  dir: ", dir, ", visitedDirs: ", c.visitedDirs)
 	if _, ok := c.visitedDirs[dir]; ok {
 		return true
 	}
@@ -281,7 +309,7 @@ func newSQLMigration(fs http.FileSystem, filePath string) func(DB) error {
 		for scanner.Scan() {
 			b := scanner.Bytes()
 
-			const prefix = "--gopg:"
+			const prefix = "gopg:"
 			if bytes.HasPrefix(b, []byte(prefix)) {
 				b = b[len(prefix):]
 				if bytes.Equal(b, []byte("split")) {
@@ -313,6 +341,7 @@ func newSQLMigration(fs http.FileSystem, filePath string) func(DB) error {
 		}
 
 		for _, q := range queries {
+			fmt.Println("newSQLMigration: q: ", queries)
 			_, err = db.Exec(q)
 			if err != nil {
 				return err
@@ -359,6 +388,7 @@ func (c *Collection) MustRegisterTx(fns ...func(DB) error) {
 }
 
 func (c *Collection) Migrations() []*Migration {
+	fmt.Println("c.Migrations:  c.Migrations() is called.")
 	if !c.sqlAutodiscoverDisabled {
 		_ = c.DiscoverSQLMigrations(filepath.Dir(migrationFile()))
 
@@ -385,6 +415,9 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		return
 	}
 
+	fmt.Println("c.Run:  migrations: ", migrations)
+
+	fmt.Println("c.Run: - a:", a)
 	cmd := "up"
 	if len(a) > 0 {
 		cmd = a[0]
@@ -409,6 +442,7 @@ func (c *Collection) Run(db DB, a ...string) (oldVersion, newVersion int64, err 
 		}
 
 		filename := fmtMigrationFilename(version+1, strings.Join(a[1:], "_"))
+		fmt.Println("c.Run: - filename: ", filename)
 		err = createMigrationFile(filename)
 		if err != nil {
 			return
@@ -713,6 +747,7 @@ func (c *Collection) begin(db DB) (*pg.Tx, int64, error) {
 }
 
 func extractVersionGo(name string) (int64, error) {
+	fmt.Println("extractVersionGo: name: ", name)
 	base := filepath.Base(name)
 	if !strings.HasSuffix(name, ".go") {
 		return 0, fmt.Errorf("file=%q must have extension .go", base)

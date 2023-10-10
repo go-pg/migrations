@@ -7,6 +7,7 @@ import (
 )
 
 func init() {
+	fmt.Println("2_add_id.go: init function is called!!!!")
 	migrations.MustRegisterTx(func(db migrations.DB) error {
 		fmt.Println("adding id column...")
 		_, err := db.Exec(`ALTER TABLE my_table ADD id serial`)

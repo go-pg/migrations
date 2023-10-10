@@ -7,6 +7,7 @@ import (
 )
 
 func init() {
+	fmt.Println("3_seed_data.go: init() function is called")
 	migrations.MustRegisterTx(func(db migrations.DB) error {
 		fmt.Println("seeding my_table...")
 		_, err := db.Exec(`INSERT INTO my_table VALUES (1)`)
