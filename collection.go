@@ -559,7 +559,7 @@ func (c *Collection) runUp(db DB, tx *pg.Tx, m *Migration) (int64, error) {
 	})
 }
 
-func (c *Collection) runDown(db DB, tx *pg.Tx, m *Migration) (int64, error) {
+func (c *Collection) runDown(db DB, tx *pg.Tx, m *Migration, newVersion int64) (int64, error) {
 	if m.DownTx {
 		db = tx
 	}
@@ -570,7 +570,7 @@ func (c *Collection) runDown(db DB, tx *pg.Tx, m *Migration) (int64, error) {
 				return 0, err
 			}
 		}
-		return m.Version - 1, nil
+		return newVersion, nil
 	})
 }
 
@@ -591,8 +591,10 @@ func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion 
 	}
 
 	var m *Migration
+	var newVersion int64
 	for i := len(migrations) - 1; i >= 0; i-- {
 		mm := migrations[i]
+		newVersion = migrations[i-1].Version // get the version of migration to one more -1
 		if mm.Version <= oldVersion {
 			m = mm
 			break
@@ -602,7 +604,7 @@ func (c *Collection) down(db DB, tx *pg.Tx, migrations []*Migration, oldVersion 
 	if m == nil {
 		return oldVersion, nil
 	}
-	return c.runDown(db, tx, m)
+	return c.runDown(db, tx, m, newVersion)
 }
 
 func (c *Collection) schemaExists(db DB) (bool, error) {
